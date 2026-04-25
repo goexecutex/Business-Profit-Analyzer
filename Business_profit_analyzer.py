@@ -14,7 +14,8 @@ import matplotlib.ticker as mticker
 from difflib import get_close_matches
 
 # ── Page Setup ────────────────────────────────────────────────
-st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡") 
+st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 # ── Global CSS ────────────────────────────────────────────────
 st.markdown("""
@@ -282,7 +283,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    uploaded = st.file_uploader(
+    uploaded = st.file_uploader
         "Upload Your Data",
         type=["csv", "xlsx", "xls", "json"],
         help="Supports CSV, Excel (.xlsx/.xls), and JSON. For files over 200 MB, run:\n"
