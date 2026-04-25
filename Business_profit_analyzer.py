@@ -14,7 +14,7 @@ import matplotlib.ticker as mticker
 from difflib import get_close_matches
 
 # ── Page Setup ────────────────────────────────────────────────
-st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡" layout="wide", initial_sidebar_state="expanded") 
+st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡", layout="wide", initial_sidebar_state="expanded") 
 
 
 # ── Global CSS ────────────────────────────────────────────────
