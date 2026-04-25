@@ -403,7 +403,13 @@ missing = [FIELD_META[f][0] for f in FIELD_META if not mapping.get(f)]
 if missing:
     st.warning(f"⚠️ Please map: **{', '.join(missing)}**")
 
-if not st.button("🚀 Confirm & Analyze", type="primary", disabled=bool(missing)):
+if "analyze_clicked" not in st.session_state:
+    st.session_state.analyze_clicked = False
+
+if st.button("🚀 Confirm & Analyze", type="primary", disabled=bool(missing)):
+    st.session_state.analyze_clicked = True
+
+if not st.session_state.analyze_clicked:
     st.stop()
 
 
@@ -578,7 +584,7 @@ st.markdown('<div class="sec"><div class="dot"></div>Sales Trend</div>', unsafe_
 df["_rev"] = df["Quantity Sold"] * df["Selling Price"]
 df["_pft"] = df["Quantity Sold"] * (df["Selling Price"] - df["Cost Price"])
 
-view = st.radio("View by", ["Daily", "Weekly", "Monthly"], horizontal=True, label_visibility="collapsed")
+view = st.radio("View by", ["Daily", "Weekly", "Monthly"], horizontal=True, label_visibility="collapsed", key="trend_view")
 freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "MS"}
 trend = (
     df.set_index("Date")
