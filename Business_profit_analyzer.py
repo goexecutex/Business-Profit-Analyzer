@@ -283,7 +283,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    uploaded = st.file_uploader
+    uploaded = st.file_uploader(
         "Upload Your Data",
         type=["csv", "xlsx", "xls", "json"],
         help="Supports CSV, Excel (.xlsx/.xls), and JSON. For files over 200 MB, run:\n"
