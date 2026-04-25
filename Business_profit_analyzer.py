@@ -14,15 +14,18 @@ import matplotlib.ticker as mticker
 from difflib import get_close_matches
 
 # ── Page Setup ────────────────────────────────────────────────
-st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡") 
-st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="GoExecuteX Pro", page_icon="⚡" layout="wide", initial_sidebar_state="expanded") 
+
 
 # ── Global CSS ────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #080c14; color: #e2e8f0; }
-#MainMenu, footer, header { visibility: hidden; }
+/* Hide menu and footer only — keep header so sidebar arrow stays visible */
+#MainMenu, footer { 
+    visibility: hidden; 
+}
 
 .hero {
     background: linear-gradient(135deg, #0f172a 0%, #1a1040 50%, #0f172a 100%);
