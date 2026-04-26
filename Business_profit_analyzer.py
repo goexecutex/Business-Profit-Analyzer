@@ -1,5 +1,5 @@
 # ============================================================
-#  BizInsight Pro — Universal Business Profit Analyzer
+#  GoExecuteX Insights — Universal Business Profit Analyzer
 #  ─────────────────────────────────────────────────────────
 #  Run:         streamlit run app.py
 #  Large files: streamlit run app.py --server.maxUploadSize=1024
@@ -330,7 +330,7 @@ with st.sidebar:
 st.markdown("""
 <div class="hero">
   <div class="badge">Universal Business Intelligence</div>
-  <h1>⚡ GoExecuteX <span>Pro</span></h1>
+  <h1>⚡ GoExecuteX <span>Insights</span></h1>
   <p>Upload sales data in any format, map your columns in seconds, and get a full
   profit intelligence report — works for any type of business.</p>
 </div>
@@ -643,6 +643,6 @@ st.markdown(f'<div class="summary">{make_summary(enriched, btype)}</div>', unsaf
 
 st.markdown("<br>", unsafe_allow_html=True)
 st.caption(
-    f"GoExecuteX Pro · {cfg['emoji']} {btype.split(' ',1)[1]} · "
+    f"GoExecuteX Insights · {cfg['emoji']} {btype.split(' ',1)[1]} · "
     f"Analyzed {len(df):,} rows · Data processed locally — never uploaded anywhere"
 )
