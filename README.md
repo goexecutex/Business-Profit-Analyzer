@@ -75,7 +75,7 @@ Built by **Sakshi Pacharne** — BBA Data Analytics & AI student at Royal Roads 
 Currently working as an ESG Technology Intern at BARZ Group. Interested in applying data analytics and business intelligence to real-world problems.
 
 📧 sakshipacharne31@gmail.com
-🌐 [Portfolio]
+🌐 [Portfolio] (https://sakshipacharne-portfolio.netlify.app)
 
 ---
 
