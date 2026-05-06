@@ -1,648 +1,705 @@
-# ============================================================
-#  GoExecuteX Insights — Universal Business Profit Analyzer
-#  ─────────────────────────────────────────────────────────
-#  Run:         streamlit run app.py
-#  Large files: streamlit run app.py --server.maxUploadSize=1024
-#  Install:     pip install streamlit pandas matplotlib openpyxl
-# ============================================================
-
-import json
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
-from difflib import get_close_matches
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import io
+from datetime import datetime, timedelta
 
-# ── Page Setup ────────────────────────────────────────────────
-st.set_page_config(page_title="GoExecuteX Insights", page_icon="⚡", layout="wide", initial_sidebar_state="expanded") 
+st.set_page_config(
+    page_title="GoExecuteX Insights",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-
-# ── Global CSS ────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #080c14; color: #e2e8f0; }
-/* Hide menu and footer only — keep header so sidebar arrow stays visible */
-#MainMenu, footer { 
-    visibility: hidden; 
-}
+    /* Dark theme base */
+    .stApp { background-color: #0e1117; }
+    section[data-testid="stSidebar"] { background-color: #161b22; border-right: 1px solid #30363d; }
+    
+    /* Hero banner */
+    .hero-banner {
+        background: linear-gradient(135deg, #1a1f3c 0%, #0d1117 100%);
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 2rem 2.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .hero-tag {
+        display: inline-block;
+        background: rgba(88,101,242,0.2);
+        color: #7c8aff;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        padding: 4px 12px;
+        border-radius: 20px;
+        border: 1px solid rgba(88,101,242,0.3);
+        margin-bottom: 1rem;
+    }
+    .hero-title { font-size: 2.4rem; font-weight: 700; color: #c9d1d9; margin: 0.3rem 0; }
+    .hero-title span { color: #7c8aff; }
+    .hero-sub { color: #8b949e; font-size: 1rem; margin-top: 0.5rem; }
 
-.hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1a1040 50%, #0f172a 100%);
-    border: 1px solid #2d2060; border-radius: 20px; padding: 2.5rem 3rem;
-    margin-bottom: 2rem; position: relative; overflow: hidden;
-}
-.hero::before {
-    content: ''; position: absolute; top: -40%; right: -5%;
-    width: 450px; height: 450px;
-    background: radial-gradient(circle, rgba(99,102,241,0.13) 0%, transparent 70%);
-    pointer-events: none;
-}
-.hero .badge {
-    display: inline-block; background: rgba(99,102,241,0.15);
-    border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc;
-    font-size: .72rem; font-weight: 600; padding: .2rem .8rem;
-    border-radius: 999px; margin-bottom: 1rem; letter-spacing: .08em; text-transform: uppercase;
-}
-.hero h1 { font-size: 2.4rem; font-weight: 700; color: #fff; margin: 0 0 .5rem; }
-.hero h1 span { background: linear-gradient(90deg,#818cf8,#c084fc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-.hero p  { font-size: 1rem; color: #94a3b8; margin: 0; max-width: 580px; }
+    /* Step badge */
+    .step-badge {
+        display: inline-block;
+        background: rgba(88,101,242,0.15);
+        color: #7c8aff;
+        border: 1px solid rgba(88,101,242,0.3);
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+    }
 
-.sec {
-    display: flex; align-items: center; gap: .6rem;
-    font-size: 1.05rem; font-weight: 600; color: #e2e8f0;
-    margin: 2.2rem 0 1rem; padding-bottom: .6rem; border-bottom: 1px solid #1e293b;
-}
-.sec .dot { width: 8px; height: 8px; background: #6366f1; border-radius: 50%; flex-shrink: 0; }
+    /* Metric cards */
+    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 2rem; }
+    .metric-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 1.2rem 1.4rem;
+    }
+    .metric-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+    .metric-value { font-size: 2rem; font-weight: 700; margin: 6px 0 4px; }
+    .metric-value.revenue { color: #7c8aff; }
+    .metric-value.profit { color: #3fb950; }
+    .metric-value.margin { color: #3fb950; }
+    .metric-value.items { color: #c9d1d9; }
+    .metric-sub { font-size: 12px; color: #8b949e; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
-.kpi {
-    background: #0d1526; border: 1px solid #1e293b; border-radius: 16px;
-    padding: 1.3rem 1.5rem;
-}
-.kpi .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: #64748b; margin-bottom: .5rem; }
-.kpi .val { font-size: 1.85rem; font-weight: 700; color: #f8fafc; line-height: 1.1; }
-.kpi .val.g { color: #22c55e; } .kpi .val.r { color: #ef4444; }
-.kpi .val.y { color: #eab308; } .kpi .val.p { color: #a78bfa; }
-.kpi .sub  { font-size: .75rem; color: #475569; margin-top: .4rem; }
+    /* Section headers */
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #c9d1d9;
+        margin: 2rem 0 1rem;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #21262d;
+    }
+    .section-dot { width: 8px; height: 8px; border-radius: 50%; background: #7c8aff; display: inline-block; }
 
-.step-pill {
-    display: inline-flex; align-items: center; gap: .5rem;
-    background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.25);
-    color: #a5b4fc; border-radius: 999px; padding: .3rem 1rem;
-    font-size: .8rem; font-weight: 500; margin-bottom: 1rem;
-}
+    /* Recommendation cards */
+    .rec-card {
+        background: rgba(35, 134, 54, 0.15);
+        border: 1px solid rgba(35, 134, 54, 0.3);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 10px;
+        color: #3fb950;
+        font-size: 14px;
+    }
+    .rec-card.warning {
+        background: rgba(187, 128, 9, 0.15);
+        border-color: rgba(187, 128, 9, 0.3);
+        color: #d29922;
+    }
+    .rec-card.danger {
+        background: rgba(248, 81, 73, 0.15);
+        border-color: rgba(248, 81, 73, 0.3);
+        color: #f85149;
+    }
 
-.map-hint {
-    background: #0d1526; border: 1px solid #1e293b; border-radius: 14px;
-    padding: 1rem 1.5rem; margin-bottom: 1.2rem; color: #94a3b8; font-size: .88rem;
-}
-.map-hint strong { color: #a5b4fc; }
+    /* Summary box */
+    .summary-box {
+        background: linear-gradient(135deg, #1a1f3c 0%, #161b22 100%);
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 1.5rem 2rem;
+        margin-top: 1rem;
+    }
+    .summary-box p { color: #c9d1d9; font-size: 14px; line-height: 1.8; margin-bottom: 12px; }
+    .summary-box p:last-child { margin-bottom: 0; }
+    .hl-purple { color: #7c8aff; font-weight: 600; }
+    .hl-green { color: #3fb950; font-weight: 600; }
+    .hl-red { color: #f85149; font-weight: 600; }
 
-.pill-warn { background:#1c1008;border:1px solid #78350f;color:#fbbf24;border-radius:10px;padding:.8rem 1.2rem;font-size:.88rem;margin:.4rem 0; }
-.pill-ok   { background:#052e16;border:1px solid #14532d;color:#4ade80;border-radius:10px;padding:.8rem 1.2rem;font-size:.88rem;margin:.4rem 0; }
-.pill-info { background:#0c1a3a;border:1px solid #1e3a8a;color:#93c5fd;border-radius:10px;padding:.8rem 1.2rem;font-size:.88rem;margin:.4rem 0; }
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #484f58;
+        font-size: 12px;
+        padding: 2rem 0 1rem;
+        border-top: 1px solid #21262d;
+        margin-top: 3rem;
+    }
 
-.summary {
-    background: linear-gradient(135deg, #0d1526, #1a1040);
-    border: 1px solid #2d2060; border-radius: 16px;
-    padding: 2rem 2.4rem; line-height: 1.9; color: #cbd5e1; font-size: .97rem;
-}
-.summary strong { color: #a5b4fc; }
-
-hr.div { border: none; border-top: 1px solid #1e293b; margin: 2rem 0; }
+    /* Hide streamlit default elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display: none;}
+    div[data-testid="stToolbar"] {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
+# ─── Constants ────────────────────────────────────────────────────────────────
 
-# ════════════════════════════════════════════════════════════
-#  CONFIGURATION
-# ════════════════════════════════════════════════════════════
+BUSINESS_TYPES = [
+    "🍽️ Restaurant / Cafe",
+    "🛍️ Retail Store",
+    "🌐 E-commerce",
+    "🔧 Service Business",
+    "🏥 Healthcare / Clinic",
+    "📦 Wholesale / B2B",
+    "🗂️ Custom / Other",
+]
 
-BUSINESS_TYPES = {
-    "🍽️ Restaurant / Cafe":  {"noun":"dish",    "emoji":"🍽️", "price_lbl":"Menu Price",     "cost_lbl":"Food Cost",      "qty_lbl":"Portions Sold"},
-    "🛍️ Retail Store":       {"noun":"product", "emoji":"🛍️", "price_lbl":"Retail Price",    "cost_lbl":"Purchase Cost",  "qty_lbl":"Units Sold"},
-    "🌐 E-commerce":          {"noun":"product", "emoji":"🌐", "price_lbl":"Sale Price",      "cost_lbl":"COGS",           "qty_lbl":"Orders"},
-    "🔧 Service Business":    {"noun":"service", "emoji":"🔧", "price_lbl":"Billed Amount",   "cost_lbl":"Service Cost",   "qty_lbl":"Jobs Done"},
-    "🏥 Healthcare / Clinic": {"noun":"service", "emoji":"🏥", "price_lbl":"Service Fee",     "cost_lbl":"Direct Cost",    "qty_lbl":"Patients Seen"},
-    "📦 Wholesale / B2B":     {"noun":"product", "emoji":"📦", "price_lbl":"Wholesale Price", "cost_lbl":"Unit Cost",      "qty_lbl":"Units"},
-    "📊 Custom / Other":      {"noun":"item",    "emoji":"📊", "price_lbl":"Selling Price",   "cost_lbl":"Cost Price",     "qty_lbl":"Quantity"},
+CURRENCIES = {
+    "USD ($)": "$",
+    "EUR (€)": "€",
+    "GBP (£)": "£",
+    "AED (د.إ)": "AED ",
+    "SAR (﷼)": "SAR ",
+    "INR (₹)": "₹",
+    "JPY (¥)": "¥",
+    "CNY (¥)": "¥",
 }
 
-# Known aliases for each required field (for auto-detection)
-FIELD_ALIASES = {
-    "item_name": [
-        "item name","item","product name","product","service name","service",
-        "dish","menu item","name","description","sku","article","category",
-        "product title","listing","job type","treatment","procedure","title",
-    ],
-    "quantity": [
-        "quantity","qty","units","units sold","quantity sold","qty sold","orders",
-        "count","sold","volume","pieces","jobs","sessions","transactions",
-        "portions","covers","patients","visits","invoices","no of units","num units",
-    ],
-    "selling_price": [
-        "selling price","sale price","price","revenue","billed amount","rate","mrp",
-        "unit price","sell price","selling","amount","charge","fee","tariff",
-        "list price","service fee","wholesale price","unit selling price",
-    ],
-    "cost_price": [
-        "cost price","cost","cogs","purchase price","buy price","expense",
-        "unit cost","buying price","landed cost","food cost","ingredient cost",
-        "direct cost","variable cost","cost of goods","cost of goods sold",
-    ],
-    "date": [
-        "date","order date","sale date","transaction date","day","period",
-        "invoice date","created at","created_at","timestamp","order_date",
-        "sale_date","visit date","service date","purchase date",
-    ],
+FIELD_NAMES = {
+    "item": "Item / Product Name",
+    "qty": "Quantity Sold",
+    "sell": "Selling Price",
+    "cost": "Cost Price",
+    "date": "Date",
 }
 
-FIELD_META = {
-    "item_name":     ("Item / Product Name",  "The name of what you're selling"),
-    "quantity":      ("Quantity Sold",         "How many units/portions were sold"),
-    "selling_price": ("Selling Price",         "Price charged per unit"),
-    "cost_price":    ("Cost Price",            "Your cost per unit"),
-    "date":          ("Date",                  "Date of the sale / transaction"),
-}
+PLOT_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="#161b22",
+    font_color="#c9d1d9",
+    font_family="sans-serif",
+    margin=dict(l=10, r=10, t=40, b=10),
+    xaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d"),
+    yaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d"),
+)
 
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
-# ════════════════════════════════════════════════════════════
-#  HELPERS
-# ════════════════════════════════════════════════════════════
+def fmt(val, currency_sym="$", decimals=0):
+    """Format number with currency symbol."""
+    if decimals == 0:
+        return f"{currency_sym}{val:,.0f}"
+    return f"{currency_sym}{val:,.{decimals}f}"
 
-def auto_detect(columns: list[str]) -> dict:
-    """Auto-map dataframe columns → internal field names using aliases + fuzzy match."""
-    col_lower = {c.lower().strip(): c for c in columns}
-    detected = {}
-    for field, aliases in FIELD_ALIASES.items():
-        for alias in aliases:
-            if alias in col_lower:
-                detected[field] = col_lower[alias]
-                break
-        if field not in detected:
-            match = get_close_matches(field.replace("_", " "), list(col_lower), n=1, cutoff=0.52)
-            if match:
-                detected[field] = col_lower[match[0]]
-    return detected
+def generate_sample_csv(business_type):
+    """Generate sample CSV data based on business type."""
+    np.random.seed(42)
+    days = pd.date_range(start="2026-01-01", periods=90, freq="D")
 
+    menus = {
+        "🍽️ Restaurant / Cafe": [
+            ("Margherita Pizza", 36, 15), ("Chicken Pasta", 34, 14),
+            ("Mojito", 18, 6), ("Chicken Burger", 28, 11),
+            ("Chocolate Cake", 24, 9), ("French Fries", 12, 4),
+            ("Steak Sandwich", 42, 31), ("Caesar Salad", 26, 18),
+        ],
+        "🛍️ Retail Store": [
+            ("Wireless Headphones", 79, 35), ("Phone Case", 19, 4),
+            ("Laptop Stand", 45, 18), ("USB Hub", 29, 12),
+            ("Screen Cleaner", 12, 3), ("Keyboard", 65, 28),
+        ],
+        "🌐 E-commerce": [
+            ("T-Shirt", 29, 8), ("Sneakers", 89, 40), ("Cap", 22, 7),
+            ("Hoodie", 59, 22), ("Socks Bundle", 15, 4),
+        ],
+        "🔧 Service Business": [
+            ("Consultation", 150, 20), ("Installation", 200, 60),
+            ("Repair Service", 120, 40), ("Maintenance", 90, 25),
+        ],
+        "🏥 Healthcare / Clinic": [
+            ("General Checkup", 100, 30), ("Blood Test", 60, 20),
+            ("X-Ray", 150, 55), ("Dental Cleaning", 120, 35),
+        ],
+        "📦 Wholesale / B2B": [
+            ("Product Box A", 45, 22), ("Product Box B", 60, 28),
+            ("Bulk Pack C", 120, 65), ("Bundle D", 200, 110),
+        ],
+        "🗂️ Custom / Other": [
+            ("Item A", 50, 20), ("Item B", 80, 35),
+            ("Item C", 30, 12), ("Item D", 100, 45),
+        ],
+    }
 
-def load_file(f) -> tuple[pd.DataFrame | None, str | None]:
-    """Load CSV / Excel / JSON into a DataFrame. Returns (df, error_msg)."""
-    name = f.name.lower()
-    try:
-        if name.endswith(".csv"):
-            for enc in ["utf-8", "latin-1", "cp1252"]:
-                try:
-                    f.seek(0)
-                    return pd.read_csv(f, encoding=enc, low_memory=False), None
-                except UnicodeDecodeError:
-                    continue
-            return None, "Cannot decode CSV file — try saving it as UTF-8."
-        elif name.endswith((".xlsx", ".xls")):
-            return pd.read_excel(f), None
-        elif name.endswith(".json"):
-            data = json.load(f)
-            if isinstance(data, list):
-                return pd.DataFrame(data), None
-            elif isinstance(data, dict):
-                # Handle {key: [{...}]} or flat dict
-                for v in data.values():
-                    if isinstance(v, list):
-                        return pd.DataFrame(v), None
-                return pd.DataFrame([data]), None
-            return None, "JSON must be an array of objects."
-        return None, "Unsupported file type (use CSV, Excel, or JSON)."
-    except Exception as e:
-        return None, f"Read error: {e}"
+    items = menus.get(business_type, menus["🗂️ Custom / Other"])
+    rows = []
+    for day in days:
+        n = np.random.randint(1, 4)
+        for _ in range(n):
+            item = items[np.random.randint(len(items))]
+            qty = np.random.randint(1, 15)
+            rows.append({
+                "Item Name": item[0],
+                "Quantity Sold": qty,
+                "Selling Price": item[1],
+                "Cost Price": item[2],
+                "Date": day.strftime("%Y-%m-%d"),
+            })
+    return pd.DataFrame(rows)
 
+def compute_metrics(df, item_col, qty_col, sell_col, cost_col):
+    """Compute all analytics from mapped dataframe."""
+    df = df.copy()
+    df["_qty"] = pd.to_numeric(df[qty_col], errors="coerce").fillna(0)
+    df["_sell"] = pd.to_numeric(df[sell_col], errors="coerce").fillna(0)
+    df["_cost"] = pd.to_numeric(df[cost_col], errors="coerce").fillna(0)
+    df["_revenue"] = df["_qty"] * df["_sell"]
+    df["_cost_total"] = df["_qty"] * df["_cost"]
+    df["_profit"] = df["_revenue"] - df["_cost_total"]
+    df["_margin"] = ((df["_sell"] - df["_cost"]) / df["_sell"] * 100).where(df["_sell"] > 0, 0)
 
-def style_chart(fig, ax):
-    """Apply dark premium chart theme."""
-    BG = "#0d1526"
-    fig.patch.set_facecolor(BG); ax.set_facecolor(BG)
-    ax.tick_params(colors="#64748b", labelsize=9)
-    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
-        lbl.set_color("#94a3b8")
-    ax.xaxis.label.set_color("#64748b"); ax.yaxis.label.set_color("#64748b")
-    for s in ax.spines.values(): s.set_edgecolor("#1e293b")
-    ax.grid(axis="both", color="#1e293b", linewidth=0.4, linestyle="--")
-    ax.set_axisbelow(True)
+    summary = df.groupby(df[item_col]).agg(
+        qty=("_qty", "sum"),
+        revenue=("_revenue", "sum"),
+        cost_total=("_cost_total", "sum"),
+        profit=("_profit", "sum"),
+        sell_price=("_sell", "mean"),
+        cost_price=("_cost", "mean"),
+    ).reset_index()
+    summary.rename(columns={item_col: "Item Name"}, inplace=True)
+    summary["Profit Margin %"] = ((summary["sell_price"] - summary["cost_price"]) / summary["sell_price"] * 100).round(1)
+    summary["Profit Margin %"] = summary["Profit Margin %"].clip(lower=0)
+    return df, summary
 
-
-def horiz_bar(ax, fig, data, x_col, y_col, color, fmt_str):
-    bars = ax.barh(data[y_col], data[x_col], color=color, height=0.55, zorder=2)
-    ax.bar_label(bars, fmt=fmt_str, padding=5, color="#94a3b8", fontsize=8)
-    style_chart(fig, ax)
-
-
-def make_summary(enriched: pd.DataFrame, btype: str) -> str:
-    """Generate plain-English business summary with actionable advice."""
-    cfg  = BUSINESS_TYPES[btype]
-    noun = cfg["noun"]
-    tr   = enriched["Revenue"].sum()
-    tp   = enriched["Profit"].sum()
-    mg   = (tp / tr * 100) if tr else 0
-    top  = enriched.nlargest(1, "Profit").iloc[0]
-    worst= enriched.nsmallest(1, "Profit Margin %").iloc[0]
-    bsell= enriched.nlargest(1, "Quantity Sold").iloc[0]
-    hl   = enriched[
-        (enriched["Quantity Sold"] >= enriched["Quantity Sold"].quantile(0.6)) &
-        (enriched["Profit Margin %"] < 20)
-    ]
-
-    mg_desc = (
-        "strong — you're running a tight, profitable operation" if mg >= 35 else
-        "moderate — solid but there's clear room to grow"       if mg >= 20 else
-        "below average — this needs immediate attention"
-    )
-
-    lines = [
-        f"Your business recorded <strong>{tr:,.0f}</strong> in total revenue with a net profit of "
-        f"<strong>{tp:,.0f}</strong>. Your overall margin of <strong>{mg:.1f}%</strong> is {mg_desc}.",
-
-        f"<strong>{top['Item Name']}</strong> is your highest-profit {noun} at "
-        f"{top['Profit Margin %']:.1f}% margin. Make sure it's front-and-center — featured, promoted, "
-        f"and recommended to every customer.",
-
-        f"<strong>{bsell['Item Name']}</strong> leads in volume "
-        f"({int(bsell['Quantity Sold'])} {cfg['qty_lbl'].lower()}). "
-        + (f"With {bsell['Profit Margin %']:.1f}% margin, it's a genuine star — protect its cost structure."
-           if bsell['Profit Margin %'] >= 25 else
-           f"However, its {bsell['Profit Margin %']:.1f}% margin means it's not pulling its profitability weight "
-           f"— reprice it or reduce unit cost before it grows into a bigger problem."),
-
-        f"<strong>{worst['Item Name']}</strong> has the weakest margin at "
-        f"{worst['Profit Margin %']:.1f}%. Raise its price, reduce material/ingredient cost, or phase it out entirely.",
-    ]
-
-    if not hl.empty:
-        names = ", ".join(f"<strong>{r}</strong>" for r in hl["Item Name"].tolist()[:3])
-        lines.append(
-            f"⚠️ Hidden losers detected: {names}. These sell well but quietly drain your profit. "
-            f"They feel like winners but they're not — reprice or renegotiate supplier costs urgently."
-        )
-
-    lines.append(
-        f"<strong>Your action plan:</strong> "
-        + ("Focus on cost reduction and repricing your bottom performers immediately. "
-           "Even a 5% margin improvement on your top 5 items could meaningfully change monthly profit."
-           if mg < 25 else
-           "You're in a solid position. Double down on your highest-margin items, phase out the bottom 20%, "
-           "and keep a weekly eye on hidden losers before they quietly erode what you've built.")
-    )
-    return "<br><br>".join(f"▸ {l}" for l in lines)
-
-
-# ════════════════════════════════════════════════════════════
-#  SIDEBAR
-# ════════════════════════════════════════════════════════════
+# ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("## ⚙️ Setup")
-
-    btype = st.selectbox("Business Type", list(BUSINESS_TYPES.keys()), index=0)
-    cfg   = BUSINESS_TYPES[btype]
-
     st.markdown("---")
 
-    uploaded = st.file_uploader(
+    business_type = st.selectbox("Business Type", BUSINESS_TYPES)
+
+    if business_type == "🗂️ Custom / Other":
+        custom_label = st.text_input("Custom business label", placeholder="e.g. Photography Studio")
+        display_type = custom_label if custom_label else "Custom / Other"
+    else:
+        display_type = business_type
+
+    currency_choice = st.selectbox("Currency", list(CURRENCIES.keys()), index=0)
+    currency_sym = CURRENCIES[currency_choice]
+
+    st.markdown("---")
+    uploaded_file = st.file_uploader(
         "Upload Your Data",
-        type=["csv", "xlsx", "xls", "json"],
-        help="Supports CSV, Excel (.xlsx/.xls), and JSON. For files over 200 MB, run:\n"
-             "streamlit run app.py --server.maxUploadSize=1024",
+        type=["csv", "xlsx", "xls"],
+        help="Upload a CSV or Excel file with your sales data",
     )
 
     st.markdown("---")
-    st.markdown("**📐 5 Required Fields**")
-    for label, hint in [
+    st.markdown("**5 Required Fields**")
+    for label, desc in [
         ("Item / Product Name", "What was sold"),
-        ("Quantity",            "How many units"),
-        ("Selling Price",       "Price charged"),
-        ("Cost Price",          "Your cost per unit"),
-        ("Date",                "Date of sale"),
+        ("Quantity", "How many units"),
+        ("Selling Price", "Price charged"),
+        ("Cost Price", "Your cost per unit"),
+        ("Date", "Date of sale"),
     ]:
-        st.markdown(
-            f"**{label}**  \n<small style='color:#64748b'>{hint}</small>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"**{label}**")
+        st.caption(desc)
 
     st.markdown("---")
-    sample_csv = (
-        "Item Name,Quantity Sold,Selling Price,Cost Price,Date\n"
-        "Grilled Chicken,45,55,20,2024-01-01\nBeef Burger,38,48,22,2024-01-02\n"
-        "Caesar Salad,20,35,10,2024-01-03\nMargherita Pizza,60,42,15,2024-01-04\n"
-        "Lamb Chops,15,110,65,2024-01-05\nVeggie Wrap,28,30,12,2024-01-06\n"
-        "Cheesecake,50,30,8,2024-01-07\nPasta Carbonara,33,45,18,2024-01-08\n"
-        "Fish & Chips,22,52,28,2024-01-09\nMango Juice,80,18,5,2024-01-10\n"
-    )
-    st.download_button("⬇️ Download Sample CSV", sample_csv, "sample_data.csv", "text/csv")
-    st.markdown(
-        "<small style='color:#475569'>Your data never leaves your device.</small>",
-        unsafe_allow_html=True,
+    sample_df = generate_sample_csv(business_type)
+    csv_bytes = sample_df.to_csv(index=False).encode()
+    st.download_button(
+        "⬇️ Download Sample CSV",
+        data=csv_bytes,
+        file_name="sample_data.csv",
+        mime="text/csv",
+        use_container_width=True,
     )
 
-
-# ════════════════════════════════════════════════════════════
-#  HERO BANNER
-# ════════════════════════════════════════════════════════════
+# ─── Hero Banner ──────────────────────────────────────────────────────────────
 
 st.markdown("""
-<div class="hero">
-  <div class="badge">Universal Business Intelligence</div>
-  <h1>⚡ GoExecuteX <span>Insights</span></h1>
-  <p>Upload sales data in any format, map your columns in seconds, and get a full
-  profit intelligence report — works for any type of business.</p>
+<div class="hero-banner">
+    <div class="hero-tag">UNIVERSAL BUSINESS INTELLIGENCE</div>
+    <div class="hero-title">⚡ <span>GoExecuteX</span> Insights</div>
+    <div class="hero-sub">Upload sales data in any format, map your columns in seconds, and get a full profit intelligence report — works for any type of business.</div>
 </div>
 """, unsafe_allow_html=True)
 
-if not uploaded:
-    c1, c2, c3 = st.columns(3)
-    c1.info("**Step 1**  \nChoose your business type from the sidebar")
-    c2.info("**Step 2**  \nUpload CSV, Excel, or JSON — any column names")
-    c3.info("**Step 3**  \nMap your columns once → instant profit dashboard")
+# ─── No file uploaded ─────────────────────────────────────────────────────────
+
+if uploaded_file is None:
+    st.markdown('<div class="step-badge">🚀 Step 1 of 2 — Upload Your Data</div>', unsafe_allow_html=True)
+    st.info("👈 Upload a CSV or Excel file from the sidebar to get started. Download the sample CSV to see the expected format.")
     st.stop()
 
+# ─── Load file ────────────────────────────────────────────────────────────────
 
-# ════════════════════════════════════════════════════════════
-#  LOAD FILE
-# ════════════════════════════════════════════════════════════
-
-df_raw, err = load_file(uploaded)
-if err:
-    st.error(f"❌ {err}")
+try:
+    if uploaded_file.name.endswith(".csv"):
+        raw_df = pd.read_csv(uploaded_file)
+    else:
+        raw_df = pd.read_excel(uploaded_file)
+    raw_df.columns = raw_df.columns.str.strip()
+except Exception as e:
+    st.error(f"Could not read file: {e}")
     st.stop()
 
-df_raw.columns = df_raw.columns.str.strip()
+cols = list(raw_df.columns)
 
-if df_raw.empty or df_raw.shape[1] < 2:
-    st.error("❌ File appears to be empty or has fewer than 2 columns.")
-    st.stop()
+# ─── Step 1: Column Mapping ───────────────────────────────────────────────────
 
+def auto_match(columns, keywords):
+    for col in columns:
+        cl = col.lower()
+        if any(k in cl for k in keywords):
+            return col
+    return columns[0]
 
-# ════════════════════════════════════════════════════════════
-#  COLUMN MAPPING STEP
-# ════════════════════════════════════════════════════════════
+if "mapping_confirmed" not in st.session_state:
+    st.session_state.mapping_confirmed = False
 
-st.markdown('<div class="step-pill">📌 Step 1 of 2 — Map Your Columns</div>', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Column Mapping</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-badge">🚀 Step 1 of 2 — Map Your Columns</div>', unsafe_allow_html=True)
 
-detected = auto_detect(df_raw.columns.tolist())
-n_detected = len(detected)
-confidence = "🟢 All 5 detected" if n_detected==5 else f"🟡 {n_detected}/5 auto-detected — review below" if n_detected>=3 else f"🔴 Only {n_detected}/5 detected — please map manually"
+detected = sum([
+    any(k in c.lower() for c in cols for k in ["item", "name", "product"]),
+    any(k in c.lower() for c in cols for k in ["qty", "quantity", "units", "sold"]),
+    any(k in c.lower() for c in cols for k in ["sell", "selling", "price", "revenue"]),
+    any(k in c.lower() for c in cols for k in ["cost"]),
+    any(k in c.lower() for c in cols for k in ["date", "day", "time"]),
+])
 
 st.markdown(f"""
-<div class="map-hint">
-  Your file has <strong>{len(df_raw.columns)}</strong> columns and 
-  <strong>{len(df_raw):,}</strong> rows. {confidence}.<br>
-  <span style="color:#475569;font-size:.82rem;">
-    Column names don't need to match exactly — select the right field from the dropdown for each.
-  </span>
+<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 18px;margin-bottom:1.5rem;">
+    Your file has <strong>{len(cols)}</strong> columns and <strong>{len(raw_df)}</strong> rows.
+    {"🟢 " + str(detected) + " of 5 detected." if detected == 5 else "⚠️ Not all fields auto-detected — please map manually."}
+    <br><small style="color:#8b949e;">Column names don't need to match exactly — select the right field from the dropdown for each.</small>
 </div>
 """, unsafe_allow_html=True)
 
-opts = ["(skip / not in my data)"] + df_raw.columns.tolist()
-
-mapping: dict[str, str | None] = {}
-col_left, col_right = st.columns(2)
-for i, (field, (label, hint)) in enumerate(FIELD_META.items()):
-    col = col_left if i % 2 == 0 else col_right
-    with col:
-        default = detected.get(field, "(skip / not in my data)")
-        idx = opts.index(default) if default in opts else 0
-        chosen = st.selectbox(
-            f"**{label}**",
-            opts,
-            index=idx,
-            key=f"map_{field}",
-            help=hint,
+with st.form("mapping_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        item_col = st.selectbox(
+            "Item / Product Name",
+            cols,
+            index=cols.index(auto_match(cols, ["item", "name", "product", "dish", "service"])),
         )
-        mapping[field] = chosen if chosen != "(skip / not in my data)" else None
+        sell_col = st.selectbox(
+            "Selling Price",
+            cols,
+            index=cols.index(auto_match(cols, ["sell", "selling", "price", "revenue", "amount"])),
+        )
+        date_col = st.selectbox(
+            "Date",
+            cols,
+            index=cols.index(auto_match(cols, ["date", "day", "time", "period"])),
+        )
+    with col2:
+        qty_col = st.selectbox(
+            "Quantity Sold",
+            cols,
+            index=cols.index(auto_match(cols, ["qty", "quantity", "units", "sold", "count"])),
+        )
+        cost_col = st.selectbox(
+            "Cost Price",
+            cols,
+            index=cols.index(auto_match(cols, ["cost", "cogs", "expense", "purchase"])),
+        )
 
-missing = [FIELD_META[f][0] for f in FIELD_META if not mapping.get(f)]
-if missing:
-    st.warning(f"⚠️ Please map: **{', '.join(missing)}**")
+    submitted = st.form_submit_button("🚀 Confirm & Analyze", use_container_width=False, type="primary")
+    if submitted:
+        st.session_state.mapping_confirmed = True
+        st.session_state.mapping = {
+            "item": item_col, "qty": qty_col,
+            "sell": sell_col, "cost": cost_col, "date": date_col,
+        }
 
-if "analyze_clicked" not in st.session_state:
-    st.session_state.analyze_clicked = False
-
-if st.button("🚀 Confirm & Analyze", type="primary", disabled=bool(missing)):
-    st.session_state.analyze_clicked = True
-
-if not st.session_state.analyze_clicked:
+if not st.session_state.mapping_confirmed:
     st.stop()
 
+# ─── Step 2: Profit Dashboard ─────────────────────────────────────────────────
 
-# ════════════════════════════════════════════════════════════
-#  BUILD CLEAN DATAFRAME
-# ════════════════════════════════════════════════════════════
+m = st.session_state.mapping
+item_col = m["item"]
+qty_col = m["qty"]
+sell_col = m["sell"]
+cost_col = m["cost"]
+date_col = m["date"]
 
-rename_map = {
-    mapping["item_name"]:     "Item Name",
-    mapping["quantity"]:      "Quantity Sold",
-    mapping["selling_price"]: "Selling Price",
-    mapping["cost_price"]:    "Cost Price",
-    mapping["date"]:          "Date",
-}
-df = df_raw.rename(columns=rename_map)[list(rename_map.values())].copy()
+df, summary = compute_metrics(raw_df, item_col, qty_col, sell_col, cost_col)
 
-df["Date"]          = pd.to_datetime(df["Date"], dayfirst=False, errors="coerce")
-df["Quantity Sold"] = pd.to_numeric(df["Quantity Sold"].astype(str).str.replace(",",""), errors="coerce")
-df["Selling Price"] = pd.to_numeric(df["Selling Price"].astype(str).str.replace("[^0-9.]","",regex=True), errors="coerce")
-df["Cost Price"]    = pd.to_numeric(df["Cost Price"].astype(str).str.replace("[^0-9.]","",regex=True), errors="coerce")
+# Parse dates
+df["_date"] = pd.to_datetime(df[date_col], errors="coerce")
+valid_dates = df["_date"].dropna()
 
-bad_count = df.isnull().any(axis=1).sum()
-df.dropna(inplace=True)
+st.markdown('<div class="step-badge">📊 Step 2 of 2 — Profit Dashboard</div>', unsafe_allow_html=True)
 
-if df.empty:
-    st.error("❌ No valid rows after cleaning. Check your column mapping and data.")
-    st.stop()
+# ── Date range filter ─────────────────────────────────────────────────────────
+if not valid_dates.empty:
+    min_date = valid_dates.min().date()
+    max_date = valid_dates.max().date()
+    with st.expander("📅 Filter by Date Range", expanded=False):
+        d1, d2 = st.date_input(
+            "Select range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+        )
+    mask = (df["_date"].dt.date >= d1) & (df["_date"].dt.date <= d2)
+    df_filtered = df[mask]
+    _, summary = compute_metrics(df_filtered, item_col, qty_col, sell_col, cost_col)
+    date_range_str = f"{d1.strftime('%b %d, %Y')} → {d2.strftime('%b %d, %Y')}"
+    days_count = (d2 - d1).days + 1
+else:
+    df_filtered = df
+    date_range_str = "All time"
+    days_count = len(df)
 
-st.success(
-    f"✅ Loaded **{len(df):,} valid rows** across "
-    f"**{df['Item Name'].nunique()} unique items**"
-    + (f" · {bad_count:,} rows skipped (invalid values)" if bad_count else "")
-)
-
-
-# ════════════════════════════════════════════════════════════
-#  ENRICH — PER-ITEM AGGREGATION
-# ════════════════════════════════════════════════════════════
-
-enriched = (
-    df.groupby("Item Name", as_index=False)
-    .agg(
-        **{"Quantity Sold":  ("Quantity Sold",  "sum"),
-           "Selling Price":  ("Selling Price",  "mean"),
-           "Cost Price":     ("Cost Price",     "mean")}
-    )
-)
-enriched["Revenue"]         = enriched["Quantity Sold"] * enriched["Selling Price"]
-enriched["Cost"]            = enriched["Quantity Sold"] * enriched["Cost Price"]
-enriched["Profit"]          = enriched["Revenue"] - enriched["Cost"]
-enriched["Profit Margin %"] = (enriched["Profit"] / enriched["Revenue"] * 100).round(1)
-
-
-# ════════════════════════════════════════════════════════════
-#  DASHBOARD
-# ════════════════════════════════════════════════════════════
-
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="step-pill">📊 Step 2 of 2 — Profit Dashboard</div>', unsafe_allow_html=True)
-
-date_min  = df["Date"].min().strftime("%b %d, %Y")
-date_max  = df["Date"].max().strftime("%b %d, %Y")
-days_span = (df["Date"].max() - df["Date"].min()).days + 1
-
-# ── KPI Cards ─────────────────────────────────────────────────
-st.markdown('<div class="sec"><div class="dot"></div>Key Metrics</div>', unsafe_allow_html=True)
-
-tr  = enriched["Revenue"].sum()
-tp  = enriched["Profit"].sum()
-mg  = (tp / tr * 100) if tr else 0
-mgc = "g" if mg >= 30 else "y" if mg >= 15 else "r"
+# ── Key Metrics ───────────────────────────────────────────────────────────────
+total_rev = df_filtered["_revenue"].sum()
+total_profit = df_filtered["_profit"].sum()
+avg_margin = (total_profit / total_rev * 100) if total_rev > 0 else 0
+unique_items = df_filtered[item_col].nunique()
+total_tx = len(df_filtered)
+margin_label = "Healthy ✓" if avg_margin >= 40 else ("Fair ~" if avg_margin >= 20 else "Low ⚠")
 
 st.markdown(f"""
-<div class="kpi-grid">
-  <div class="kpi">
-    <div class="lbl">Total Revenue</div>
-    <div class="val p">{tr:,.0f}</div>
-    <div class="sub">{date_min} → {date_max}</div>
-  </div>
-  <div class="kpi">
-    <div class="lbl">Total Profit</div>
-    <div class="val g">{tp:,.0f}</div>
-    <div class="sub">{days_span} days of data</div>
-  </div>
-  <div class="kpi">
-    <div class="lbl">Avg Profit Margin</div>
-    <div class="val {mgc}">{mg:.1f}%</div>
-    <div class="sub">{'Healthy ✓' if mg>=30 else 'Needs work ⚠️' if mg>=15 else 'Critical ❌'}</div>
-  </div>
-  <div class="kpi">
-    <div class="lbl">Unique Items</div>
-    <div class="val">{len(enriched)}</div>
-    <div class="sub">{len(df):,} total transactions</div>
-  </div>
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-label">Total Revenue</div>
+        <div class="metric-value revenue">{fmt(total_rev, currency_sym)}</div>
+        <div class="metric-sub">{date_range_str}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Total Profit</div>
+        <div class="metric-value profit">{fmt(total_profit, currency_sym)}</div>
+        <div class="metric-sub">{days_count} days of data</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Avg Profit Margin</div>
+        <div class="metric-value margin">{avg_margin:.1f}%</div>
+        <div class="metric-sub">{margin_label}</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Unique Items</div>
+        <div class="metric-value items">{unique_items}</div>
+        <div class="metric-sub">{total_tx:,} total transactions</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Raw Data Preview ──────────────────────────────────────────
-with st.expander("🗂️ Raw Data Preview", expanded=False):
-    preview = df.head(1000).reset_index(drop=True)
-    st.dataframe(preview, use_container_width=True)
-    if len(df) > 1000:
-        st.caption(f"Showing first 1,000 of {len(df):,} rows. Full dataset is used for all calculations.")
+# ── Raw Data Preview ──────────────────────────────────────────────────────────
+with st.expander("📋 Raw Data Preview"):
+    st.dataframe(df_filtered[[item_col, qty_col, sell_col, cost_col, date_col]].head(50), use_container_width=True)
 
-# ── Profitability Table ───────────────────────────────────────
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Item Profitability Breakdown</div>', unsafe_allow_html=True)
+# ── Item Profitability Breakdown ──────────────────────────────────────────────
+st.markdown('<div class="section-header"><span class="section-dot"></span> Item Profitability Breakdown</div>', unsafe_allow_html=True)
 
-display_cols = ["Item Name","Quantity Sold","Selling Price","Cost Price","Revenue","Cost","Profit","Profit Margin %"]
-table_h = min(500, 70 + 36 * len(enriched))
+display_summary = summary.copy()
+display_summary.columns = ["Item Name", "Qty Sold", "Revenue", "Cost", "Profit", "Avg Sell Price", "Avg Cost Price", "Profit Margin %"]
+display_summary["Revenue"] = display_summary["Revenue"].apply(lambda x: fmt(x, currency_sym))
+display_summary["Cost"] = display_summary["Cost"].apply(lambda x: fmt(x, currency_sym))
+display_summary["Profit"] = display_summary["Profit"].apply(lambda x: fmt(x, currency_sym))
+display_summary["Avg Sell Price"] = display_summary["Avg Sell Price"].apply(lambda x: fmt(x, currency_sym, 2))
+display_summary["Avg Cost Price"] = display_summary["Avg Cost Price"].apply(lambda x: fmt(x, currency_sym, 2))
+display_summary["Qty Sold"] = display_summary["Qty Sold"].apply(lambda x: f"{x:,.0f}")
+display_summary["Profit Margin %"] = display_summary["Profit Margin %"].apply(lambda x: f"{x:.1f}%")
 
 st.dataframe(
-    enriched[display_cols]
-    .sort_values("Profit", ascending=False)
-    .reset_index(drop=True)
-    .style
-    .format({"Selling Price":"{:.2f}","Cost Price":"{:.2f}","Revenue":"{:,.0f}",
-             "Cost":"{:,.0f}","Profit":"{:,.0f}","Profit Margin %":"{:.1f}%"})
-    .background_gradient(subset=["Profit Margin %"], cmap="RdYlGn"),
+    display_summary[["Item Name", "Qty Sold", "Avg Sell Price", "Avg Cost Price", "Revenue", "Cost", "Profit", "Profit Margin %"]],
     use_container_width=True,
-    height=table_h,
+    hide_index=True,
 )
 
-# ── Charts ────────────────────────────────────────────────────
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Performance Charts</div>', unsafe_allow_html=True)
+# ── Export ────────────────────────────────────────────────────────────────────
+col_exp1, col_exp2 = st.columns([1, 5])
+with col_exp1:
+    export_df = summary.copy()
+    export_df.columns = ["Item Name", "Qty Sold", "Revenue", "Cost", "Profit", "Avg Sell Price", "Avg Cost Price", "Profit Margin %"]
+    csv_export = export_df.to_csv(index=False).encode()
+    st.download_button("⬇️ Export Report CSV", data=csv_export, file_name="profit_report.csv", mime="text/csv")
 
-PURPLE = "#6366f1"; GREEN = "#22c55e"; RED = "#ef4444"; YELLOW = "#eab308"
-
-thresh = enriched["Quantity Sold"].quantile(0.6)
-hidden = enriched[(enriched["Quantity Sold"] >= thresh) & (enriched["Profit Margin %"] < 20)].sort_values("Profit Margin %")
+# ── Performance Charts ────────────────────────────────────────────────────────
+st.markdown('<div class="section-header"><span class="section-dot"></span> Performance Charts</div>', unsafe_allow_html=True)
 
 c1, c2 = st.columns(2)
-with c1:
-    st.markdown(f"**🏆 Top 5 Most Profitable**")
-    t5 = enriched.nlargest(5, "Profit").sort_values("Profit")
-    fig, ax = plt.subplots(figsize=(5.5, 3.5))
-    horiz_bar(ax, fig, t5, "Profit", "Item Name", GREEN, "%.0f")
-    ax.set_xlabel("Profit"); st.pyplot(fig, use_container_width=True); plt.close()
 
+# BUG FIX 1: Top 5 Most Profitable — sorted by total profit descending
+with c1:
+    top5 = summary.nlargest(5, "profit")
+    fig1 = go.Figure(go.Bar(
+        x=top5["profit"],
+        y=top5["Item Name"],
+        orientation="h",
+        marker_color="#3fb950",
+        text=top5["profit"].apply(lambda x: fmt(x, currency_sym)),
+        textposition="outside",
+        hovertemplate="%{y}: %{x:,.0f}<extra></extra>",
+    ))
+    fig1.update_layout(title="🏆 Top 5 Most Profitable", **PLOT_LAYOUT, height=300,
+                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
+                       xaxis=dict(title="Profit", gridcolor="#21262d"))
+    st.plotly_chart(fig1, use_container_width=True)
+
+# BUG FIX 2: Lowest Profit Margins — sorted ASCENDING (lowest first = worst performers)
 with c2:
-    st.markdown("**📉 Lowest Profit Margins**")
-    b5 = enriched.nsmallest(5, "Profit Margin %").sort_values("Profit Margin %")
-    fig, ax = plt.subplots(figsize=(5.5, 3.5))
-    horiz_bar(ax, fig, b5, "Profit Margin %", "Item Name", RED, "%.1f%%")
-    ax.set_xlabel("Profit Margin %"); st.pyplot(fig, use_container_width=True); plt.close()
+    bottom5 = summary.nsmallest(5, "Profit Margin %")
+    fig2 = go.Figure(go.Bar(
+        x=bottom5["Profit Margin %"],
+        y=bottom5["Item Name"],
+        orientation="h",
+        marker_color="#f85149",
+        text=bottom5["Profit Margin %"].apply(lambda x: f"{x:.1f}%"),
+        textposition="outside",
+        hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+    ))
+    fig2.update_layout(title="📉 Lowest Profit Margins (worst first)", **PLOT_LAYOUT, height=300,
+                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
+                       xaxis=dict(title="Profit Margin %", gridcolor="#21262d"))
+    st.plotly_chart(fig2, use_container_width=True)
 
 c3, c4 = st.columns(2)
+
+# Best Sellers by Volume
 with c3:
-    st.markdown(f"**🛒 Best Sellers by {cfg['qty_lbl']}**")
-    tq = enriched.nlargest(5, "Quantity Sold").sort_values("Quantity Sold")
-    fig, ax = plt.subplots(figsize=(5.5, 3.5))
-    horiz_bar(ax, fig, tq, "Quantity Sold", "Item Name", PURPLE, "%.0f")
-    ax.set_xlabel(cfg["qty_lbl"]); st.pyplot(fig, use_container_width=True); plt.close()
+    top_vol = summary.nlargest(5, "qty")
+    fig3 = go.Figure(go.Bar(
+        x=top_vol["qty"],
+        y=top_vol["Item Name"],
+        orientation="h",
+        marker_color="#7c8aff",
+        text=top_vol["qty"].apply(lambda x: f"{x:,.0f}"),
+        textposition="outside",
+        hovertemplate="%{y}: %{x:,.0f} units<extra></extra>",
+    ))
+    fig3.update_layout(title="🛒 Best Sellers by Volume", **PLOT_LAYOUT, height=300,
+                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
+                       xaxis=dict(title="Units Sold", gridcolor="#21262d"))
+    st.plotly_chart(fig3, use_container_width=True)
 
+# BUG FIX 3: Hidden Losers — High volume AND low margin (both conditions must be met)
+# Threshold: volume > median volume AND margin < median margin
 with c4:
-    st.markdown("**⚠️ High Volume, Low Margin (Hidden Losers)**")
-    if hidden.empty:
-        st.success("✅ No hidden losers — great margin discipline!")
+    vol_median = summary["qty"].median()
+    margin_median = summary["Profit Margin %"].median()
+    # Use lower of (median margin, 40%) as threshold so it's business-meaningful
+    margin_threshold = min(margin_median, 40.0)
+
+    hidden_losers = summary[
+        (summary["qty"] > vol_median) &
+        (summary["Profit Margin %"] < margin_threshold)
+    ].sort_values("Profit Margin %")
+
+    if hidden_losers.empty:
+        st.markdown("""
+        <div style="background:rgba(35,134,54,0.15);border:1px solid rgba(35,134,54,0.3);
+        border-radius:8px;padding:40px 20px;text-align:center;color:#3fb950;margin-top:40px;">
+            ✅ No hidden losers — great margin discipline!<br>
+            <small style="color:#8b949e;font-size:11px;">
+            Definition: items with volume above median AND margin below {:.0f}%
+            </small>
+        </div>
+        """.format(margin_threshold), unsafe_allow_html=True)
     else:
-        fig, ax = plt.subplots(figsize=(5.5, 3.5))
-        horiz_bar(ax, fig, hidden, "Profit Margin %", "Item Name", YELLOW, "%.1f%%")
-        ax.axvline(20, color=RED, linestyle="--", linewidth=1.2, label="20% threshold", zorder=3)
-        ax.set_xlabel("Profit Margin %")
-        ax.legend(fontsize=8, labelcolor="#94a3b8", facecolor="#0d1526", edgecolor="#1e293b")
-        st.pyplot(fig, use_container_width=True); plt.close()
+        fig4 = go.Figure(go.Scatter(
+            x=hidden_losers["qty"],
+            y=hidden_losers["Profit Margin %"],
+            mode="markers+text",
+            text=hidden_losers["Item Name"],
+            textposition="top center",
+            marker=dict(color="#d29922", size=14, line=dict(color="#fff", width=1)),
+            hovertemplate="%{text}<br>Volume: %{x:,.0f}<br>Margin: %{y:.1f}%<extra></extra>",
+        ))
+        fig4.update_layout(
+            title=f"⚠️ Hidden Losers (vol>{vol_median:.0f} & margin<{margin_threshold:.0f}%)",
+            **PLOT_LAYOUT, height=300,
+            xaxis=dict(title="Volume Sold", gridcolor="#21262d"),
+            yaxis=dict(title="Profit Margin %", gridcolor="#21262d"),
+        )
+        st.plotly_chart(fig4, use_container_width=True)
 
-# ── Sales Trend ───────────────────────────────────────────────
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Sales Trend</div>', unsafe_allow_html=True)
+# ── Sales Trend ───────────────────────────────────────────────────────────────
+if not valid_dates.empty:
+    st.markdown('<div class="section-header"><span class="section-dot"></span> Sales Trend</div>', unsafe_allow_html=True)
 
-df["_rev"] = df["Quantity Sold"] * df["Selling Price"]
-df["_pft"] = df["Quantity Sold"] * (df["Selling Price"] - df["Cost Price"])
+    trend_mode = st.radio("Aggregation", ["Daily", "Weekly", "Monthly"], horizontal=True)
+    freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "ME"}
+    freq = freq_map[trend_mode]
 
-view = st.radio("View by", ["Daily", "Weekly", "Monthly"], horizontal=True, label_visibility="collapsed", key="trend_view")
-freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "MS"}
-trend = (
-    df.set_index("Date")
-    .resample(freq_map[view])
-    .agg(Revenue=("_rev","sum"), Profit=("_pft","sum"))
-    .reset_index()
-)
-trend = trend[(trend["Revenue"] > 0) | (trend["Profit"] != 0)]  # remove empty periods
+    df_trend = df_filtered.copy()
+    df_trend["_date"] = pd.to_datetime(df_trend[date_col], errors="coerce")
+    df_trend = df_trend.dropna(subset=["_date"])
+    trend = df_trend.groupby(pd.Grouper(key="_date", freq=freq)).agg(
+        Revenue=("_revenue", "sum"),
+        Profit=("_profit", "sum"),
+    ).reset_index()
 
-fig, ax = plt.subplots(figsize=(11, 4))
-ax.fill_between(trend["Date"], trend["Revenue"], alpha=0.1, color=PURPLE)
-ax.fill_between(trend["Date"], trend["Profit"],  alpha=0.1, color=GREEN)
-ax.plot(trend["Date"], trend["Revenue"], color=PURPLE, linewidth=2.2, label="Revenue")
-ax.plot(trend["Date"], trend["Profit"],  color=GREEN,  linewidth=2.2, label="Profit")
-ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-ax.legend(fontsize=9, labelcolor="#94a3b8", facecolor="#0d1526", edgecolor="#1e293b")
-style_chart(fig, ax)
-plt.xticks(rotation=30, ha="right")
-st.pyplot(fig, use_container_width=True); plt.close()
+    fig5 = go.Figure()
+    fig5.add_trace(go.Scatter(x=trend["_date"], y=trend["Revenue"], name="Revenue",
+                              line=dict(color="#7c8aff", width=2), fill="tozeroy",
+                              fillcolor="rgba(124,138,255,0.1)"))
+    fig5.add_trace(go.Scatter(x=trend["_date"], y=trend["Profit"], name="Profit",
+                              line=dict(color="#3fb950", width=2), fill="tozeroy",
+                              fillcolor="rgba(63,185,80,0.1)"))
+    fig5.update_layout(**PLOT_LAYOUT, height=300,
+                       yaxis=dict(title=f"Amount ({currency_sym})", gridcolor="#21262d"),
+                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig5, use_container_width=True)
 
-# ── Recommendations ───────────────────────────────────────────
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Recommendations</div>', unsafe_allow_html=True)
+# ── Recommendations ───────────────────────────────────────────────────────────
+st.markdown('<div class="section-header"><span class="section-dot"></span> Recommendations</div>', unsafe_allow_html=True)
 
-any_rec = False
-for _, row in enriched[enriched["Profit Margin %"] >= 40].nlargest(3, "Profit Margin %").iterrows():
-    st.markdown(
-        f'<div class="pill-ok">✅ <strong>Promote "{row["Item Name"]}"</strong> — '
-        f'{row["Profit Margin %"]:.1f}% margin. Feature it prominently, train your team to upsell it.</div>',
-        unsafe_allow_html=True,
-    ); any_rec = True
+# BUG FIX 4: Consistent recommendation logic
+# Promote: top margin items (above avg margin)
+# Review:  mid margin items
+# Phase out: very low margin items (< 35% of max margin)
 
-for _, row in enriched[enriched["Profit Margin %"] < 15].nsmallest(3, "Profit Margin %").iterrows():
-    st.markdown(
-        f'<div class="pill-warn">⚠️ <strong>Fix or Remove "{row["Item Name"]}"</strong> — '
-        f'only {row["Profit Margin %"]:.1f}% margin. Raise price, cut unit cost, or discontinue it.</div>',
-        unsafe_allow_html=True,
-    ); any_rec = True
+avg_m = summary["Profit Margin %"].mean()
+max_m = summary["Profit Margin %"].max()
 
-for _, row in hidden.iterrows():
-    st.markdown(
-        f'<div class="pill-warn">🔍 <strong>Hidden Loser: "{row["Item Name"]}"</strong> — '
-        f'{int(row["Quantity Sold"])} units sold but only {row["Profit Margin %"]:.1f}% margin. '
-        f"Looks like a winner — it isn't. Fix it now.</div>",
-        unsafe_allow_html=True,
-    ); any_rec = True
+promote_threshold = avg_m
+phase_threshold = max_m * 0.35
 
-if not any_rec:
-    st.markdown('<div class="pill-info">ℹ️ Margins look balanced across your catalog. Review weekly to catch trends early.</div>', unsafe_allow_html=True)
+recs_promote = summary[summary["Profit Margin %"] >= promote_threshold].sort_values("Profit Margin %", ascending=False)
+recs_review = summary[(summary["Profit Margin %"] >= phase_threshold) & (summary["Profit Margin %"] < promote_threshold)].sort_values("Profit Margin %", ascending=False)
+recs_phase = summary[summary["Profit Margin %"] < phase_threshold].sort_values("Profit Margin %")
 
-# ── Business Summary ─────────────────────────────────────────
-st.markdown('<hr class="div">', unsafe_allow_html=True)
-st.markdown('<div class="sec"><div class="dot"></div>Business Summary</div>', unsafe_allow_html=True)
+for _, row in recs_promote.iterrows():
+    st.markdown(f"""<div class="rec-card">✅ Promote <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Feature it prominently, train your team to upsell it.</div>""", unsafe_allow_html=True)
 
-st.markdown(f'<div class="summary">{make_summary(enriched, btype)}</div>', unsafe_allow_html=True)
+for _, row in recs_review.iterrows():
+    st.markdown(f"""<div class="rec-card warning">⚠️ Review <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Consider raising price or reducing cost.</div>""", unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-st.caption(
-    f"GoExecuteX Insights · {cfg['emoji']} {btype.split(' ',1)[1]} · "
-    f"Analyzed {len(df):,} rows · Data processed locally — never uploaded anywhere"
-)
+for _, row in recs_phase.iterrows():
+    st.markdown(f"""<div class="rec-card danger">🔴 Phase Out / Reprice <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Raise price, cut cost, or remove it.</div>""", unsafe_allow_html=True)
+
+# ── Business Summary ──────────────────────────────────────────────────────────
+st.markdown('<div class="section-header"><span class="section-dot"></span> Business Summary</div>', unsafe_allow_html=True)
+
+# BUG FIX 5: Correct highest margin item logic
+best_margin_row = summary.loc[summary["Profit Margin %"].idxmax()]
+worst_margin_row = summary.loc[summary["Profit Margin %"].idxmin()]
+best_profit_row = summary.loc[summary["profit"].idxmax()]
+top_volume_row = summary.loc[summary["qty"].idxmax()]
+
+margin_health = "strong — you're running a tight, profitable operation" if avg_margin >= 45 else \
+                "solid — there's room to push margins higher" if avg_margin >= 30 else \
+                "below average — urgent action needed on low-margin items"
+
+st.markdown(f"""
+<div class="summary-box">
+    <p>▸ Your business recorded <span class="hl-purple">{fmt(total_rev, currency_sym)}</span> in total revenue with a net profit of <span class="hl-green">{fmt(total_profit, currency_sym)}</span>. Your overall margin of <span class="hl-green">{avg_margin:.1f}%</span> is {margin_health}.</p>
+    <p>▸ <span class="hl-green">{best_margin_row['Item Name']}</span> has your highest profit margin at {best_margin_row['Profit Margin %']:.1f}%. Make sure it's front-and-center — featured, promoted, and recommended to every customer.</p>
+    <p>▸ <span class="hl-purple">{top_volume_row['Item Name']}</span> leads in volume ({top_volume_row['qty']:,.0f} units sold). With a {top_volume_row['Profit Margin %']:.1f}% margin, {"it's a genuine star — protect its cost structure." if top_volume_row['Profit Margin %'] >= avg_margin else "watch out — high volume with low margin drains profit quietly."}</p>
+    <p>▸ <span class="hl-red">{worst_margin_row['Item Name']}</span> has the weakest margin at {worst_margin_row['Profit Margin %']:.1f}%. Raise its price, reduce material/ingredient cost, or phase it out entirely.</p>
+    <p>▸ <strong>Your action plan:</strong> {"You're in a solid position. Double down on your highest-margin items, phase out the bottom 20%, and keep a weekly eye on hidden losers before they quietly erode what you've built." if avg_margin >= 40 else "Your margins need attention. Start by repricing or removing your worst performers, and focus promotions on high-margin items."}</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Footer ────────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="footer">
+    GoExecuteX Insights · {display_type} · Analyzed {total_tx:,} rows · Data processed locally — never uploaded anywhere
+</div>
+""", unsafe_allow_html=True)
