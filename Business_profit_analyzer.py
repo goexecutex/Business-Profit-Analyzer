@@ -538,19 +538,23 @@ with c1:
                        xaxis={**AXIS_STYLE, "title": "Profit"})
     st.plotly_chart(fig1, use_container_width=True)
 
-# BUG FIX 2: Lowest Profit Margins — sorted ASCENDING (lowest first = worst performers)
+# FIX: Lowest Profit Margins — only items below avg margin, capped at 5, sorted worst-first
 with c2:
-    bottom5 = summary.nsmallest(5, "Profit Margin %")
+    avg_margin_all = summary["Profit Margin %"].mean()
+    underperformers = summary[summary["Profit Margin %"] < avg_margin_all].nsmallest(5, "Profit Margin %")
+    # If nothing is below avg (unlikely), fall back to bottom 3
+    if underperformers.empty:
+        underperformers = summary.nsmallest(3, "Profit Margin %")
     fig2 = go.Figure(go.Bar(
-        x=bottom5["Profit Margin %"],
-        y=bottom5["Item Name"],
+        x=underperformers["Profit Margin %"],
+        y=underperformers["Item Name"],
         orientation="h",
         marker_color="#f85149",
-        text=bottom5["Profit Margin %"].apply(lambda x: f"{x:.1f}%"),
+        text=underperformers["Profit Margin %"].apply(lambda x: f"{x:.1f}%"),
         textposition="outside",
         hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
     ))
-    fig2.update_layout(title="📉 Lowest Profit Margins (worst first)", **PLOT_LAYOUT, height=300,
+    fig2.update_layout(title="📉 Lowest Profit Margins (below avg)", **PLOT_LAYOUT, height=300,
                        yaxis={**AXIS_STYLE, "autorange": "reversed"},
                        xaxis={**AXIS_STYLE, "title": "Profit Margin %"})
     st.plotly_chart(fig2, use_container_width=True)
@@ -610,10 +614,11 @@ with c4:
             textposition="outside",
             hovertemplate="%{y}<br>Margin: %{x:.1f}%<extra></extra>",
         ))
+        loser_height = max(180, min(300, 80 + len(hidden_losers) * 60))
         fig4.update_layout(
             title=f"⚠️ Hidden Losers (vol>{vol_median:.0f} & margin<{margin_threshold:.0f}%)",
-            **PLOT_LAYOUT, height=300,
-            xaxis={**AXIS_STYLE, "title": "Profit Margin %", "range": [0, margin_threshold * 1.3]},
+            **PLOT_LAYOUT, height=loser_height,
+            xaxis={**AXIS_STYLE, "title": "Profit Margin %", "range": [0, margin_threshold * 1.4]},
             yaxis={**AXIS_STYLE, "autorange": "reversed"},
         )
         st.plotly_chart(fig4, use_container_width=True)
@@ -623,23 +628,34 @@ if not valid_dates.empty:
     st.markdown('<div class="section-header"><span class="section-dot"></span> Sales Trend</div>', unsafe_allow_html=True)
 
     trend_mode = st.radio("Aggregation", ["Daily", "Weekly", "Monthly"], horizontal=True)
-    freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "MS"}
-    freq = freq_map[trend_mode]
 
     df_trend = df_filtered.copy()
     df_trend["_date"] = pd.to_datetime(df_trend[date_col], errors="coerce")
     df_trend = df_trend.dropna(subset=["_date"])
-    try:
-        trend = df_trend.groupby(pd.Grouper(key="_date", freq=freq)).agg(
+
+    if trend_mode == "Monthly":
+        # Group by calendar month — most reliable across pandas versions
+        df_trend["_period"] = df_trend["_date"].dt.to_period("M")
+        trend = df_trend.groupby("_period").agg(
             Revenue=("_revenue", "sum"),
             Profit=("_profit", "sum"),
         ).reset_index()
-    except Exception:
-        # Fallback for older pandas versions
-        trend = df_trend.groupby(pd.Grouper(key="_date", freq="M")).agg(
+        trend["_date"] = trend["_period"].dt.to_timestamp()
+        trend = trend.drop(columns=["_period"])
+        tick_format = "%b %Y"
+    elif trend_mode == "Weekly":
+        trend = df_trend.groupby(pd.Grouper(key="_date", freq="W")).agg(
             Revenue=("_revenue", "sum"),
             Profit=("_profit", "sum"),
         ).reset_index()
+        tick_format = "%b %d"
+    else:
+        trend = df_trend.groupby(pd.Grouper(key="_date", freq="D")).agg(
+            Revenue=("_revenue", "sum"),
+            Profit=("_profit", "sum"),
+        ).reset_index()
+        tick_format = "%b %d"
+
     trend = trend[(trend["Revenue"] > 0) | (trend["Profit"] > 0)]
 
     fig5 = go.Figure()
@@ -649,9 +665,9 @@ if not valid_dates.empty:
     fig5.add_trace(go.Scatter(x=trend["_date"], y=trend["Profit"], name="Profit",
                               line=dict(color="#3fb950", width=2), fill="tozeroy",
                               fillcolor="rgba(63,185,80,0.1)"))
-    fig5.update_layout(**PLOT_LAYOUT, height=300,
+    fig5.update_layout(**PLOT_LAYOUT, height=350,
                        yaxis={**AXIS_STYLE, "title": f"Amount ({currency_sym})"},
-                       xaxis=AXIS_STYLE,
+                       xaxis={**AXIS_STYLE, "tickformat": tick_format},
                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig5, use_container_width=True)
 
