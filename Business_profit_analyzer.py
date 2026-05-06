@@ -133,11 +133,20 @@ st.markdown("""
         margin-top: 3rem;
     }
 
-    /* Hide streamlit default elements */
+    /* Hide streamlit default elements but keep sidebar toggle */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none;}
     div[data-testid="stToolbar"] {visibility: hidden;}
+
+    /* Force sidebar collapse arrow to always show */
+    div[data-testid="collapsedControl"] {visibility: visible !important; display: flex !important;}
+    button[data-testid="baseButton-headerNoPadding"] {visibility: visible !important; display: flex !important;}
+    section[data-testid="stSidebarCollapsedControl"] {visibility: visible !important; display: flex !important;}
+    .st-emotion-cache-14xtw6j {visibility: visible !important;}
+    /* Catch-all for any sidebar toggle button */
+    [class*="collapsedControl"] {visibility: visible !important; display: flex !important;}
+    [data-testid*="sidebar"] button {visibility: visible !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -703,3 +712,4 @@ st.markdown(f"""
     GoExecuteX Insights · {display_type} · Analyzed {total_tx:,} rows · Data processed locally — never uploaded anywhere
 </div>
 """, unsafe_allow_html=True)
+
