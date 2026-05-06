@@ -598,20 +598,23 @@ with c4:
         </div>
         """.format(margin_threshold), unsafe_allow_html=True)
     else:
-        fig4 = go.Figure(go.Scatter(
-            x=hidden_losers["qty"],
-            y=hidden_losers["Profit Margin %"],
-            mode="markers+text",
-            text=hidden_losers["Item Name"],
-            textposition="top center",
-            marker=dict(color="#d29922", size=14, line=dict(color="#fff", width=1)),
-            hovertemplate="%{text}<br>Volume: %{x:,.0f}<br>Margin: %{y:.1f}%<extra></extra>",
+        # Use horizontal bar chart — works cleanly for 1 or many items
+        fig4 = go.Figure(go.Bar(
+            x=hidden_losers["Profit Margin %"],
+            y=hidden_losers["Item Name"],
+            orientation="h",
+            marker_color="#d29922",
+            text=hidden_losers.apply(
+                lambda r: f"{r['Profit Margin %']:.1f}% | {r['qty']:,.0f} units", axis=1
+            ),
+            textposition="outside",
+            hovertemplate="%{y}<br>Margin: %{x:.1f}%<extra></extra>",
         ))
         fig4.update_layout(
             title=f"⚠️ Hidden Losers (vol>{vol_median:.0f} & margin<{margin_threshold:.0f}%)",
             **PLOT_LAYOUT, height=300,
-            xaxis={**AXIS_STYLE, "title": "Volume Sold"},
-            yaxis={**AXIS_STYLE, "title": "Profit Margin %"},
+            xaxis={**AXIS_STYLE, "title": "Profit Margin %", "range": [0, margin_threshold * 1.3]},
+            yaxis={**AXIS_STYLE, "autorange": "reversed"},
         )
         st.plotly_chart(fig4, use_container_width=True)
 
@@ -620,16 +623,24 @@ if not valid_dates.empty:
     st.markdown('<div class="section-header"><span class="section-dot"></span> Sales Trend</div>', unsafe_allow_html=True)
 
     trend_mode = st.radio("Aggregation", ["Daily", "Weekly", "Monthly"], horizontal=True)
-    freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "ME"}
+    freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "MS"}
     freq = freq_map[trend_mode]
 
     df_trend = df_filtered.copy()
     df_trend["_date"] = pd.to_datetime(df_trend[date_col], errors="coerce")
     df_trend = df_trend.dropna(subset=["_date"])
-    trend = df_trend.groupby(pd.Grouper(key="_date", freq=freq)).agg(
-        Revenue=("_revenue", "sum"),
-        Profit=("_profit", "sum"),
-    ).reset_index()
+    try:
+        trend = df_trend.groupby(pd.Grouper(key="_date", freq=freq)).agg(
+            Revenue=("_revenue", "sum"),
+            Profit=("_profit", "sum"),
+        ).reset_index()
+    except Exception:
+        # Fallback for older pandas versions
+        trend = df_trend.groupby(pd.Grouper(key="_date", freq="M")).agg(
+            Revenue=("_revenue", "sum"),
+            Profit=("_profit", "sum"),
+        ).reset_index()
+    trend = trend[(trend["Revenue"] > 0) | (trend["Profit"] > 0)]
 
     fig5 = go.Figure()
     fig5.add_trace(go.Scatter(x=trend["_date"], y=trend["Revenue"], name="Revenue",
