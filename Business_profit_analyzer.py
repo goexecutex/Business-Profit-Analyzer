@@ -175,9 +175,8 @@ PLOT_LAYOUT = dict(
     font_color="#c9d1d9",
     font_family="sans-serif",
     margin=dict(l=10, r=10, t=40, b=10),
-    xaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d"),
-    yaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d"),
 )
+AXIS_STYLE = dict(gridcolor="#21262d", zerolinecolor="#30363d")
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -535,8 +534,8 @@ with c1:
         hovertemplate="%{y}: %{x:,.0f}<extra></extra>",
     ))
     fig1.update_layout(title="🏆 Top 5 Most Profitable", **PLOT_LAYOUT, height=300,
-                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
-                       xaxis=dict(title="Profit", gridcolor="#21262d"))
+                       yaxis={**AXIS_STYLE, "autorange": "reversed"},
+                       xaxis={**AXIS_STYLE, "title": "Profit"})
     st.plotly_chart(fig1, use_container_width=True)
 
 # BUG FIX 2: Lowest Profit Margins — sorted ASCENDING (lowest first = worst performers)
@@ -552,8 +551,8 @@ with c2:
         hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
     ))
     fig2.update_layout(title="📉 Lowest Profit Margins (worst first)", **PLOT_LAYOUT, height=300,
-                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
-                       xaxis=dict(title="Profit Margin %", gridcolor="#21262d"))
+                       yaxis={**AXIS_STYLE, "autorange": "reversed"},
+                       xaxis={**AXIS_STYLE, "title": "Profit Margin %"})
     st.plotly_chart(fig2, use_container_width=True)
 
 c3, c4 = st.columns(2)
@@ -571,8 +570,8 @@ with c3:
         hovertemplate="%{y}: %{x:,.0f} units<extra></extra>",
     ))
     fig3.update_layout(title="🛒 Best Sellers by Volume", **PLOT_LAYOUT, height=300,
-                       yaxis=dict(autorange="reversed", gridcolor="#21262d"),
-                       xaxis=dict(title="Units Sold", gridcolor="#21262d"))
+                       yaxis={**AXIS_STYLE, "autorange": "reversed"},
+                       xaxis={**AXIS_STYLE, "title": "Units Sold"})
     st.plotly_chart(fig3, use_container_width=True)
 
 # BUG FIX 3: Hidden Losers — High volume AND low margin (both conditions must be met)
@@ -611,8 +610,8 @@ with c4:
         fig4.update_layout(
             title=f"⚠️ Hidden Losers (vol>{vol_median:.0f} & margin<{margin_threshold:.0f}%)",
             **PLOT_LAYOUT, height=300,
-            xaxis=dict(title="Volume Sold", gridcolor="#21262d"),
-            yaxis=dict(title="Profit Margin %", gridcolor="#21262d"),
+            xaxis={**AXIS_STYLE, "title": "Volume Sold"},
+            yaxis={**AXIS_STYLE, "title": "Profit Margin %"},
         )
         st.plotly_chart(fig4, use_container_width=True)
 
@@ -640,7 +639,8 @@ if not valid_dates.empty:
                               line=dict(color="#3fb950", width=2), fill="tozeroy",
                               fillcolor="rgba(63,185,80,0.1)"))
     fig5.update_layout(**PLOT_LAYOUT, height=300,
-                       yaxis=dict(title=f"Amount ({currency_sym})", gridcolor="#21262d"),
+                       yaxis={**AXIS_STYLE, "title": f"Amount ({currency_sym})"},
+                       xaxis=AXIS_STYLE,
                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig5, use_container_width=True)
 
