@@ -133,8 +133,10 @@ st.markdown("""
         margin-top: 3rem;
     }
 
-    /* Only hide footer branding */
+    /* Hide footer and top-right toolbar (Fork/GitHub button) */
     footer {visibility: hidden;}
+    [data-testid="stToolbar"] {display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
