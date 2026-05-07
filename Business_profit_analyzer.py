@@ -665,9 +665,13 @@ if not valid_dates.empty:
     fig5.add_trace(go.Scatter(x=trend["_date"], y=trend["Profit"], name="Profit",
                               line=dict(color="#3fb950", width=2), fill="tozeroy",
                               fillcolor="rgba(63,185,80,0.1)"))
+    xaxis_cfg = {**AXIS_STYLE, "tickformat": tick_format}
+    if trend_mode == "Monthly":
+        xaxis_cfg["dtick"] = "M1"          # force exactly one tick per month
+        xaxis_cfg["ticklabelmode"] = "period"
     fig5.update_layout(**PLOT_LAYOUT, height=350,
                        yaxis={**AXIS_STYLE, "title": f"Amount ({currency_sym})"},
-                       xaxis={**AXIS_STYLE, "tickformat": tick_format},
+                       xaxis=xaxis_cfg,
                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig5, use_container_width=True)
 
