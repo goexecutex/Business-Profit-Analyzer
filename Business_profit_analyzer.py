@@ -845,7 +845,7 @@ if user_input:
                         })
 
                     _resp = _req.post(
-                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
                         headers={"Content-Type": "application/json"},
                         json={
                             "contents": gemini_contents,
