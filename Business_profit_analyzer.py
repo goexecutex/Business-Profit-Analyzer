@@ -725,6 +725,108 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+
+# ── AI Chat on Your Data ──────────────────────────────────────────────────────
+st.markdown('<div class="section-header"><span class="section-dot"></span> 🤖 Ask AI About Your Data</div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 18px;margin-bottom:1rem;font-size:13px;color:#8b949e;">
+    Ask anything about your business data in plain English. Examples:<br>
+    <span style="color:#7c8aff;">→ "Which item should I remove from my menu?"</span><br>
+    <span style="color:#7c8aff;">→ "Why is my profit margin lower than expected?"</span><br>
+    <span style="color:#7c8aff;">→ "If I raise Steak Sandwich price by $5, what happens?"</span><br>
+    <span style="color:#7c8aff;">→ "What was my best performing month?"</span>
+</div>
+""", unsafe_allow_html=True)
+
+# Build rich data context
+item_details = "\n".join([
+    f"  - {row['Item Name']}: {row['qty']:,.0f} units | "
+    f"Sell {currency_sym}{row['sell_price']:.2f} | Cost {currency_sym}{row['cost_price']:.2f} | "
+    f"Revenue {currency_sym}{row['revenue']:,.0f} | Profit {currency_sym}{row['profit']:,.0f} | "
+    f"Margin {row['Profit Margin %']:.1f}%"
+    for _, row in summary.iterrows()
+])
+
+if not valid_dates.empty:
+    _mt = df_filtered.copy()
+    _mt["_date"] = pd.to_datetime(_mt[date_col], errors="coerce")
+    _mt["_period"] = _mt["_date"].dt.to_period("M")
+    _ms = _mt.groupby("_period").agg(Revenue=("_revenue","sum"), Profit=("_profit","sum")).reset_index()
+    trend_str = "\n".join([f"  - {r['_period']}: Rev {currency_sym}{r['Revenue']:,.0f} | Profit {currency_sym}{r['Profit']:,.0f}" for _,r in _ms.iterrows()])
+else:
+    trend_str = "  - No date data"
+
+hidden_loser_names = ", ".join(hidden_losers["Item Name"].tolist()) if not hidden_losers.empty else "None"
+
+DATA_CONTEXT = f"""You are a sharp business analyst AI. Answer questions using ONLY the data below. Be direct, specific, use real numbers. Always end with one actionable recommendation.
+
+BUSINESS: {display_type} | Currency: {currency_sym} | Period: {date_range_str}
+TOTALS: Revenue {currency_sym}{total_rev:,.0f} | Profit {currency_sym}{total_profit:,.0f} | Margin {avg_margin:.1f}% | Transactions {total_tx:,}
+
+ITEMS:
+{item_details}
+
+MONTHLY TREND:
+{trend_str}
+
+KEY FACTS:
+- Best margin: {best_margin_row['Item Name']} ({best_margin_row['Profit Margin %']:.1f}%)
+- Worst margin: {worst_margin_row['Item Name']} ({worst_margin_row['Profit Margin %']:.1f}%)
+- Most profitable: {best_profit_row['Item Name']} ({currency_sym}{best_profit_row['profit']:,.0f})
+- Top volume: {top_volume_row['Item Name']} ({top_volume_row['qty']:,.0f} units)
+- Hidden losers: {hidden_loser_names}
+
+For what-if pricing: New Margin = (New Price - Cost) / New Price * 100. New Annual Profit = (New Price - Cost) * Quantity."""
+
+# Initialize chat history per session
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Render chat history
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"], avatar="🧑" if msg["role"] == "user" else "⚡"):
+        st.markdown(msg["content"])
+
+# Chat input box
+user_input = st.chat_input("Ask anything about your data — e.g. \'Which product should I drop?\'")
+
+if user_input:
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.chat_message("user", avatar="🧑"):
+        st.markdown(user_input)
+
+    # Build API messages with data context injected
+    api_messages = [
+        {"role": "user", "content": f"[BUSINESS DATA CONTEXT]\n{DATA_CONTEXT}"},
+        {"role": "assistant", "content": "Got it — I have full access to this business data. Ask me anything."}
+    ]
+    for m in st.session_state.chat_history:
+        api_messages.append({"role": m["role"], "content": m["content"]})
+
+    with st.chat_message("assistant", avatar="⚡"):
+        with st.spinner("Analyzing your data..."):
+            try:
+                import requests as _req
+                _resp = _req.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"Content-Type": "application/json"},
+                    json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": api_messages},
+                    timeout=30,
+                )
+                _data = _resp.json()
+                ai_reply = _data["content"][0]["text"] if _data.get("content") else "Could not generate response."
+            except Exception as e:
+                ai_reply = f"⚠️ Error: {str(e)}"
+        st.markdown(ai_reply)
+        st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
+
+if st.session_state.get("chat_history"):
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.chat_history = []
+        st.rerun()
+
+
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="footer">
