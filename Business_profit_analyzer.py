@@ -858,7 +858,9 @@ if user_input:
 
             except Exception as e:
                 ai_reply = f"⚠️ Connection error: {str(e)}"
-        st.markdown(ai_reply)
+        # Escape $ so Streamlit doesn't render currency as LaTeX math
+        ai_reply_display = ai_reply.replace("$", r"\$")
+        st.markdown(ai_reply_display)
         st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
 
 if st.session_state.get("chat_history"):
