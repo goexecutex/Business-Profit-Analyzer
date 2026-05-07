@@ -133,10 +133,18 @@ st.markdown("""
         margin-top: 3rem;
     }
 
-    /* Hide footer and top-right toolbar (Fork/GitHub button) */
+    /* Hide footer and Fork/GitHub button only */
     footer {visibility: hidden;}
-    [data-testid="stToolbar"] {display: none !important;}
-    [data-testid="stDecoration"] {display: none !important;}
+    /* Hide toolbar contents but keep sidebar toggle working */
+    [data-testid="stToolbar"] {visibility: hidden; height: 0; min-height: 0; padding: 0;}
+    /* Force sidebar collapse button always visible */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    section[data-testid="stSidebarCollapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        opacity: 1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
