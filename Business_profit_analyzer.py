@@ -807,17 +807,66 @@ if user_input:
     with st.chat_message("assistant", avatar="⚡"):
         with st.spinner("Analyzing your data..."):
             try:
-                import requests as _req
-                _resp = _req.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"Content-Type": "application/json"},
-                    json={"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": api_messages},
-                    timeout=30,
-                )
-                _data = _resp.json()
-                ai_reply = _data["content"][0]["text"] if _data.get("content") else "Could not generate response."
+                # Get Gemini API key from Streamlit secrets (FREE)
+                api_key = st.secrets.get("GEMINI_API_KEY", "")
+                if not api_key:
+                    ai_reply = (
+                        "⚠️ **Gemini API key not configured.**\n\n"
+                        "To enable AI chat (FREE):\n"
+                        "1. Go to **aistudio.google.com** → Get API Key (free, no credit card)\n"
+                        "2. Streamlit Cloud → your app → **Settings → Secrets**\n"
+                        "3. Add: `GEMINI_API_KEY = \"your-key-here\"`\n"
+                        "4. Save and redeploy"
+                    )
+                else:
+                    import requests as _req
+                    import json as _json
+
+                    # Convert message history to Gemini format
+                    # Gemini uses "user"/"model" roles (not "assistant")
+                    gemini_contents = []
+
+                    # First message: inject data context as first user turn
+                    gemini_contents.append({
+                        "role": "user",
+                        "parts": [{"text": f"[BUSINESS DATA CONTEXT — use this for all answers]\n{DATA_CONTEXT}"}]
+                    })
+                    gemini_contents.append({
+                        "role": "model",
+                        "parts": [{"text": "Got it. I have full access to this business data. Ask me anything."}]
+                    })
+
+                    # Add conversation history
+                    for m in st.session_state.chat_history:
+                        role = "model" if m["role"] == "assistant" else "user"
+                        gemini_contents.append({
+                            "role": role,
+                            "parts": [{"text": m["content"]}]
+                        })
+
+                    _resp = _req.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+                        headers={"Content-Type": "application/json"},
+                        json={
+                            "contents": gemini_contents,
+                            "generationConfig": {
+                                "maxOutputTokens": 1000,
+                                "temperature": 0.7,
+                            }
+                        },
+                        timeout=30,
+                    )
+                    _data = _resp.json()
+
+                    if _data.get("candidates"):
+                        ai_reply = _data["candidates"][0]["content"]["parts"][0]["text"]
+                    elif _data.get("error"):
+                        ai_reply = f"⚠️ API Error: {_data['error'].get('message', 'Unknown error')}"
+                    else:
+                        ai_reply = f"⚠️ Unexpected response: {str(_data)[:200]}"
+
             except Exception as e:
-                ai_reply = f"⚠️ Error: {str(e)}"
+                ai_reply = f"⚠️ Connection error: {str(e)}"
         st.markdown(ai_reply)
         st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
 
@@ -833,4 +882,3 @@ st.markdown(f"""
     GoExecuteX Insights · {display_type} · Analyzed {total_tx:,} rows · Data processed locally — never uploaded anywhere
 </div>
 """, unsafe_allow_html=True)
-
