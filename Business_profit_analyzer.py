@@ -808,58 +808,49 @@ if user_input:
         with st.spinner("Analyzing your data..."):
             try:
                 # Get Gemini API key from Streamlit secrets (FREE)
-                api_key = st.secrets.get("GEMINI_API_KEY", "")
+                api_key = st.secrets.get("GROQ_API_KEY", "")
                 if not api_key:
                     ai_reply = (
-                        "⚠️ **Gemini API key not configured.**\n\n"
-                        "To enable AI chat (FREE):\n"
-                        "1. Go to **aistudio.google.com** → Get API Key (free, no credit card)\n"
-                        "2. Streamlit Cloud → your app → **Settings → Secrets**\n"
-                        "3. Add: `GEMINI_API_KEY = \"your-key-here\"`\n"
-                        "4. Save and redeploy"
+                        "⚠️ **Groq API key not configured.**\n\n"
+                        "To enable AI chat (FREE — works globally):\n"
+                        "1. Go to **console.groq.com** → Sign up free\n"
+                        "2. Click **API Keys → Create API Key**\n"
+                        "3. Streamlit Cloud → your app → **Settings → Secrets**\n"
+                        "4. Add: `GROQ_API_KEY = \"gsk_your-key-here\"`\n"
+                        "5. Save and redeploy"
                     )
                 else:
                     import requests as _req
-                    import json as _json
 
-                    # Convert message history to Gemini format
-                    # Gemini uses "user"/"model" roles (not "assistant")
-                    gemini_contents = []
-
-                    # First message: inject data context as first user turn
-                    gemini_contents.append({
-                        "role": "user",
-                        "parts": [{"text": f"[BUSINESS DATA CONTEXT — use this for all answers]\n{DATA_CONTEXT}"}]
-                    })
-                    gemini_contents.append({
-                        "role": "model",
-                        "parts": [{"text": "Got it. I have full access to this business data. Ask me anything."}]
-                    })
-
+                    # Build messages for Groq (OpenAI-compatible format)
+                    groq_messages = [
+                        {
+                            "role": "system",
+                            "content": f"You are a sharp business analyst AI. Answer questions using ONLY the data provided. Be direct, specific, use real numbers. Always end with one actionable recommendation.\n\n{DATA_CONTEXT}"
+                        }
+                    ]
                     # Add conversation history
                     for m in st.session_state.chat_history:
-                        role = "model" if m["role"] == "assistant" else "user"
-                        gemini_contents.append({
-                            "role": role,
-                            "parts": [{"text": m["content"]}]
-                        })
+                        groq_messages.append({"role": m["role"], "content": m["content"]})
 
                     _resp = _req.post(
-                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
-                        headers={"Content-Type": "application/json"},
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                        },
                         json={
-                            "contents": gemini_contents,
-                            "generationConfig": {
-                                "maxOutputTokens": 1000,
-                                "temperature": 0.7,
-                            }
+                            "model": "llama-3.3-70b-versatile",
+                            "messages": groq_messages,
+                            "max_tokens": 1000,
+                            "temperature": 0.7,
                         },
                         timeout=30,
                     )
                     _data = _resp.json()
 
-                    if _data.get("candidates"):
-                        ai_reply = _data["candidates"][0]["content"]["parts"][0]["text"]
+                    if _data.get("choices"):
+                        ai_reply = _data["choices"][0]["message"]["content"]
                     elif _data.get("error"):
                         ai_reply = f"⚠️ API Error: {_data['error'].get('message', 'Unknown error')}"
                     else:
