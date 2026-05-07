@@ -133,18 +133,8 @@ st.markdown("""
         margin-top: 3rem;
     }
 
-    /* Hide footer and Fork/GitHub button only */
+    /* Only hide footer branding */
     footer {visibility: hidden;}
-    /* Hide toolbar contents but keep sidebar toggle working */
-    [data-testid="stToolbar"] {visibility: hidden; height: 0; min-height: 0; padding: 0;}
-    /* Force sidebar collapse button always visible */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"],
-    section[data-testid="stSidebarCollapsedControl"] {
-        visibility: visible !important;
-        display: flex !important;
-        opacity: 1 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -885,3 +875,4 @@ st.markdown(f"""
     GoExecuteX Insights · {display_type} · Analyzed {total_tx:,} rows · Data processed locally — never uploaded anywhere
 </div>
 """, unsafe_allow_html=True)
+
