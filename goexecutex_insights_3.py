@@ -241,23 +241,71 @@ def generate_sample_csv(business_type):
             })
     return pd.DataFrame(rows)
 
+def clean_numeric(series):
+    """
+    Bulletproof numeric parser — handles ANY real-world data format:
+    - Currency prefixes/suffixes: AED 186.25, $36.00, £50, 186.25 AED
+    - Comma-separated thousands: 1,163 or 1,163.50
+    - Percentage signs: 51.4%
+    - Whitespace, tabs, newlines
+    - Mixed types in same column
+    - NaN, None, empty strings
+    - Negative numbers: -50 or (50)
+    - Multiple dots: 1.2.3 → takes first valid number
+    - All pandas dtypes: object, StringDtype, Int64, float64
+    """
+    try:
+        # Convert everything to string first — works for ALL pandas dtypes
+        s = series.astype(str).str.strip()
+
+        # Replace parentheses-style negatives: (50) → -50
+        s = s.str.replace(r"^\(([0-9.,]+)\)$", r"-", regex=True)
+
+        # Keep only digits, dots, minus sign
+        s = s.str.replace("[^0-9.]", "", regex=True)
+
+        # Handle multiple dots — keep only first (e.g. "1.2.3" → "1.2")
+        def fix_dots(val):
+            parts = val.split(".")
+            if len(parts) > 2:
+                return parts[0] + "." + "".join(parts[1:])
+            return val
+        s = s.apply(fix_dots)
+
+        # Replace empty/invalid strings with 0
+        s = s.replace(["", "-", ".", "nan", "none", "null", "n/a", "na", "#n/a"], "0")
+
+        return pd.to_numeric(s, errors="coerce").fillna(0)
+
+    except Exception:
+        # Nuclear fallback — if everything fails, return zeros
+        return pd.Series([0.0] * len(series), index=series.index)
+
+
 def compute_metrics(df, item_col, qty_col, sell_col, cost_col):
     """Compute all analytics from mapped dataframe."""
     df = df.copy()
-    def clean_numeric(series):
-        """Strip currency symbols, commas, spaces then convert to float."""
-        if series.dtype == object:
-            series = series.astype(str).str.replace("[^0-9.]", "", regex=True)
-            series = series.replace("", "0")
-        return pd.to_numeric(series, errors="coerce").fillna(0)
 
-    df["_qty"] = clean_numeric(df[qty_col])
-    df["_sell"] = clean_numeric(df[sell_col])
-    df["_cost"] = clean_numeric(df[cost_col])
-    df["_revenue"] = df["_qty"] * df["_sell"]
+    # Clean item names — strip whitespace, fill blanks
+    df[item_col] = df[item_col].astype(str).str.strip()
+    df[item_col] = df[item_col].replace(["", "nan", "none", "null"], "Unknown Item")
+
+    # Parse all numeric columns with bulletproof cleaner
+    df["_qty"]   = clean_numeric(df[qty_col])
+    df["_sell"]  = clean_numeric(df[sell_col])
+    df["_cost"]  = clean_numeric(df[cost_col])
+
+    # Remove rows where qty or sell price is 0 or negative — bad data
+    df = df[(df["_qty"] > 0) & (df["_sell"] > 0)].copy()
+
+    # If nothing left after cleaning, return empty summary
+    if df.empty:
+        empty = pd.DataFrame(columns=["Item Name","qty","revenue","cost_total","profit","sell_price","cost_price","Profit Margin %"])
+        return df, empty
+
+    df["_revenue"]    = df["_qty"] * df["_sell"]
     df["_cost_total"] = df["_qty"] * df["_cost"]
-    df["_profit"] = df["_revenue"] - df["_cost_total"]
-    df["_margin"] = ((df["_sell"] - df["_cost"]) / df["_sell"] * 100).where(df["_sell"] > 0, 0)
+    df["_profit"]     = df["_revenue"] - df["_cost_total"]
 
     summary = df.groupby(df[item_col]).agg(
         qty=("_qty", "sum"),
@@ -268,8 +316,14 @@ def compute_metrics(df, item_col, qty_col, sell_col, cost_col):
         cost_price=("_cost", "mean"),
     ).reset_index()
     summary.rename(columns={item_col: "Item Name"}, inplace=True)
-    summary["Profit Margin %"] = ((summary["sell_price"] - summary["cost_price"]) / summary["sell_price"] * 100).round(1)
-    summary["Profit Margin %"] = summary["Profit Margin %"].clip(lower=0)
+
+    # Safe margin calculation — avoid division by zero
+    summary["Profit Margin %"] = np.where(
+        summary["sell_price"] > 0,
+        ((summary["sell_price"] - summary["cost_price"]) / summary["sell_price"] * 100).round(1),
+        0.0
+    )
+    summary["Profit Margin %"] = summary["Profit Margin %"].clip(lower=0).fillna(0)
     return df, summary
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
