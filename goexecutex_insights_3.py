@@ -744,24 +744,84 @@ st.markdown('<div class="section-header"><span class="section-dot"></span> Recom
 # Review:  mid margin items
 # Phase out: very low margin items (< 35% of max margin)
 
-avg_m = summary["Profit Margin %"].mean()
-max_m = summary["Profit Margin %"].max()
+# ── Smart Dynamic Recommendation Engine ──────────────────────────────────────
+# Reads the data spread first, then decides thresholds intelligently.
+# Works correctly whether margins are 10-20% or 50-60%.
 
-promote_threshold = avg_m
-phase_threshold = max_m * 0.35
+margins = summary["Profit Margin %"]
+avg_m  = margins.mean()
+min_m  = margins.min()
+max_m  = margins.max()
+spread = max_m - min_m   # how wide is the range?
+std_m  = margins.std()   # how much variation is there?
 
-recs_promote = summary[summary["Profit Margin %"] >= promote_threshold].sort_values("Profit Margin %", ascending=False)
-recs_review = summary[(summary["Profit Margin %"] >= phase_threshold) & (summary["Profit Margin %"] < promote_threshold)].sort_values("Profit Margin %", ascending=False)
-recs_phase = summary[summary["Profit Margin %"] < phase_threshold].sort_values("Profit Margin %")
+# Dynamic thresholds based on actual data distribution
+# If spread is narrow (< 15%), use std-dev based splits
+# If spread is wide (> 15%), use percentile splits
+if spread < 15:
+    # Tight cluster — use std deviation (e.g. all items 50-61%)
+    star_threshold    = avg_m + (std_m * 0.5)   # top performers
+    concern_threshold = avg_m - (std_m * 0.5)   # genuinely underperforming
+else:
+    # Wide spread — use percentiles (e.g. items from 10% to 70%)
+    star_threshold    = margins.quantile(0.60)   # top 40%
+    concern_threshold = margins.quantile(0.25)   # bottom 25%
 
-for _, row in recs_promote.iterrows():
-    st.markdown(f"""<div class="rec-card">✅ Promote <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Feature it prominently, train your team to upsell it.</div>""", unsafe_allow_html=True)
+# Absolute floor — below 20% margin is always a problem regardless of data
+ABSOLUTE_DANGER = 20.0
 
-for _, row in recs_review.iterrows():
-    st.markdown(f"""<div class="rec-card warning">⚠️ Review <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Consider raising price or reducing cost.</div>""", unsafe_allow_html=True)
+# Categorize items
+stars    = summary[margins >= star_threshold].sort_values("Profit Margin %", ascending=False)
+review   = summary[(margins >= concern_threshold) & (margins < star_threshold)].sort_values("Profit Margin %", ascending=False)
+danger   = summary[(margins < concern_threshold) | (margins < ABSOLUTE_DANGER)].sort_values("Profit Margin %")
 
-for _, row in recs_phase.iterrows():
-    st.markdown(f"""<div class="rec-card danger">🔴 Phase Out / Reprice <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. Raise price, cut cost, or remove it.</div>""", unsafe_allow_html=True)
+# Cap display: max 3 promote, 3 review, all danger items
+stars_show  = stars.head(3)
+review_show = review.head(3)
+
+# Context-aware action language
+def promote_msg(margin):
+    if margin >= 60:
+        return "Star performer. Prioritize this in all promotions and upsell training."
+    elif margin >= 50:
+        return "Strong margin. Feature it prominently and train your team to recommend it."
+    else:
+        return "Above average. Keep promoting and protect its cost structure."
+
+def review_msg(margin, avg):
+    gap = avg - margin
+    if margin < ABSOLUTE_DANGER:
+        return f"Dangerously low margin — {gap:.1f}% below your average. Reprice immediately or cut."
+    elif gap > 10:
+        return f"{gap:.1f}% below your average. Raise price or reduce cost before it becomes a drain."
+    else:
+        return f"Slightly below average. Monitor closely — small cost increases could make it a loser."
+
+def danger_msg(margin, avg):
+    if margin < 10:
+        return "Critically low margin. Selling this item costs you money. Remove or reprice urgently."
+    elif margin < ABSOLUTE_DANGER:
+        return f"Below 20% — not sustainable. Raise price by at least {(ABSOLUTE_DANGER - margin) / (1 - ABSOLUTE_DANGER/100):.0f} or phase out."
+    else:
+        return f"{avg - margin:.1f}% below your average. Investigate cost structure before it worsens."
+
+# Show if everything is healthy
+all_healthy = danger.empty and min_m >= 35
+
+if all_healthy and spread < 15:
+    st.markdown(f"""<div class="rec-card">
+        ✅ <strong>Your entire product range is performing well</strong> — margins range from {min_m:.1f}% to {max_m:.1f}%, all healthy.
+        Focus on volume growth for your top 3 items below rather than cutting anything.
+    </div>""", unsafe_allow_html=True)
+
+for _, row in stars_show.iterrows():
+    st.markdown(f"""<div class="rec-card">✅ Promote <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. {promote_msg(row['Profit Margin %'])}</div>""", unsafe_allow_html=True)
+
+for _, row in review_show.iterrows():
+    st.markdown(f"""<div class="rec-card warning">⚠️ Monitor <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. {review_msg(row['Profit Margin %'], avg_m)}</div>""", unsafe_allow_html=True)
+
+for _, row in danger.iterrows():
+    st.markdown(f"""<div class="rec-card danger">🔴 Action Required: <strong>"{row['Item Name']}"</strong> — {row['Profit Margin %']:.1f}% margin. {danger_msg(row['Profit Margin %'], avg_m)}</div>""", unsafe_allow_html=True)
 
 # ── Business Summary ──────────────────────────────────────────────────────────
 st.markdown('<div class="section-header"><span class="section-dot"></span> Business Summary</div>', unsafe_allow_html=True)
@@ -792,7 +852,7 @@ st.markdown(f"""
     <p>▸ Your business recorded <span class="hl-purple">{fmt(total_rev, currency_sym)}</span> in total revenue with a net profit of <span class="hl-green">{fmt(total_profit, currency_sym)}</span>. Your overall margin of <span class="hl-green">{avg_margin:.1f}%</span> is {margin_health}.</p>
     <p>▸ <span class="hl-green">{best_margin_row['Item Name']}</span> has your highest profit margin at {best_margin_row['Profit Margin %']:.1f}%. Make sure it's front-and-center — featured, promoted, and recommended to every customer.</p>
     <p>▸ <span class="hl-purple">{top_volume_row['Item Name']}</span> leads in volume ({top_volume_row['qty']:,.0f} units sold). With a {top_volume_row['Profit Margin %']:.1f}% margin, {"it's a genuine star — protect its cost structure." if top_volume_row['Profit Margin %'] >= avg_margin else "watch out — high volume with low margin drains profit quietly."}</p>
-    <p>▸ <span class="hl-red">{worst_margin_row['Item Name']}</span> has the weakest margin at {worst_margin_row['Profit Margin %']:.1f}%. Raise its price, reduce material/ingredient cost, or phase it out entirely.</p>
+    <p>▸ <span class="hl-red">{worst_margin_row['Item Name']}</span> has the weakest margin at {worst_margin_row['Profit Margin %']:.1f}%. {"This is still a healthy margin — monitor costs to keep it there." if worst_margin_row['Profit Margin %'] >= 40 else "Consider raising its price or reducing costs to bring it closer to your average of " + str(round(avg_margin,1)) + "%."}</p>
     <p>▸ <strong>Your action plan:</strong> {"You're in a solid position. Double down on your highest-margin items, phase out the bottom 20%, and keep a weekly eye on hidden losers before they quietly erode what you've built." if avg_margin >= 40 else "Your margins need attention. Start by repricing or removing your worst performers, and focus promotions on high-margin items."}</p>
 </div>
 """, unsafe_allow_html=True)
