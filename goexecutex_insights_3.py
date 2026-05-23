@@ -244,9 +244,16 @@ def generate_sample_csv(business_type):
 def compute_metrics(df, item_col, qty_col, sell_col, cost_col):
     """Compute all analytics from mapped dataframe."""
     df = df.copy()
-    df["_qty"] = pd.to_numeric(df[qty_col], errors="coerce").fillna(0)
-    df["_sell"] = pd.to_numeric(df[sell_col], errors="coerce").fillna(0)
-    df["_cost"] = pd.to_numeric(df[cost_col], errors="coerce").fillna(0)
+    def clean_numeric(series):
+        """Strip currency symbols, commas, spaces then convert to float."""
+        if series.dtype == object:
+            series = series.astype(str).str.replace("[^0-9.]", "", regex=True)
+            series = series.replace("", "0")
+        return pd.to_numeric(series, errors="coerce").fillna(0)
+
+    df["_qty"] = clean_numeric(df[qty_col])
+    df["_sell"] = clean_numeric(df[sell_col])
+    df["_cost"] = clean_numeric(df[cost_col])
     df["_revenue"] = df["_qty"] * df["_sell"]
     df["_cost_total"] = df["_qty"] * df["_cost"]
     df["_profit"] = df["_revenue"] - df["_cost_total"]
@@ -706,10 +713,21 @@ for _, row in recs_phase.iterrows():
 st.markdown('<div class="section-header"><span class="section-dot"></span> Business Summary</div>', unsafe_allow_html=True)
 
 # BUG FIX 5: Correct highest margin item logic
-best_margin_row = summary.loc[summary["Profit Margin %"].idxmax()]
-worst_margin_row = summary.loc[summary["Profit Margin %"].idxmin()]
-best_profit_row = summary.loc[summary["profit"].idxmax()]
-top_volume_row = summary.loc[summary["qty"].idxmax()]
+def safe_row(df, col, func="max"):
+    """Safely get row with max/min value, fallback to first row."""
+    try:
+        valid = df[df[col].notna() & (df[col] != 0)]
+        if valid.empty:
+            return df.iloc[0]
+        idx = valid[col].idxmax() if func == "max" else valid[col].idxmin()
+        return df.loc[idx]
+    except Exception:
+        return df.iloc[0]
+
+best_margin_row = safe_row(summary, "Profit Margin %", "max")
+worst_margin_row = safe_row(summary, "Profit Margin %", "min")
+best_profit_row = safe_row(summary, "profit", "max")
+top_volume_row = safe_row(summary, "qty", "max")
 
 margin_health = "strong — you're running a tight, profitable operation" if avg_margin >= 45 else \
                 "solid — there's room to push margins higher" if avg_margin >= 30 else \
